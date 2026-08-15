@@ -13,16 +13,17 @@ import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.annotation.JsonSerialize
 import com.fasterxml.jackson.module.kotlin.KotlinModule
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -32,7 +33,6 @@ import javax.imageio.ImageIO
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileFilter
 import javax.swing.filechooser.FileNameExtensionFilter
-import kotlin.collections.forEachIndexed
 
 val colorScheme = darkColorScheme(
     primary = primaryDark,
@@ -123,11 +123,14 @@ fun decodeBitmap(img: ImageWithMetadata): ImageBitmap {
                     val origWidth = it.getWidth(0)
                     val origHeight = it.getHeight(0)
 
-                    val subX = origWidth / (if (origWidth > origHeight) 240 else 180)
-                    val subY = origHeight / (if (origHeight > origWidth) 240 else 180)
-                    it.defaultReadParam.apply {
-                        setSourceSubsampling(subX, subY, 0, 0)
+                    if (origWidth > 240 && origHeight > 240) {
+                        val subX = origWidth / (if (origWidth > origHeight) 240 else 180)
+                        val subY = origHeight / (if (origHeight > origWidth) 240 else 180)
+                        it.defaultReadParam.apply {
+                            setSourceSubsampling(subX, subY, 0, 0)
+                        }
                     }
+                    it.defaultReadParam
                 }
                 value = imageReader.read(0, param).toComposeImageBitmap()
                 PreviewImageCache.put(cacheKey, value!!)
@@ -157,9 +160,10 @@ data class GenerateResponse(
 )
 
 fun main() {
+    Repository.initialize()
     application {
         val state = rememberWindowState().apply {
-            size = DpSize(1280.dp, 720.dp)
+            placement = WindowPlacement.Maximized
         }
         Window(
             onCloseRequest = ::exitApplication,
@@ -183,6 +187,186 @@ fun filePicker(fileNamFilter: FileFilter): JFileChooser = JFileChooser().apply {
     isMultiSelectionEnabled = true
 }
 
+@Composable
+fun ImageColumn(
+    images: List<ImageWithMetadata>
+) {
+    LazyColumn(
+        Modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(32.dp),
+    ) {
+        items(
+            count = images.size,
+            key = { images[it].file.absolutePath }
+        ) {
+            Card {
+                Row(
+                    Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier.weight(1f)
+                            .background(MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Image(
+                            bitmap = decodeBitmap(images[it]),
+                            contentDescription = "placeholder",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.aspectRatio(1f)
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(5f)
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(images[it].file.name)
+                        Text("title: ${images[it].title}")
+                        Text("description: ${images[it].description}")
+                        Text("category: ${images[it].category}")
+                        Text("keywords: ${images[it].keywords.joinToString(", ")}")
+
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ResultPage() {
+    Column {
+        Row(
+            Modifier.weight(2f)
+                .background(MaterialTheme.colorScheme.background)
+                .padding(24.dp, 0.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.End)
+        ) {
+
+        }
+    }
+}
+
+@Composable
+fun DirectoryChooserButton(
+    coroutineScope: CoroutineScope,
+    fileNameFilter: FileNameExtensionFilter,
+    isProcessing: Boolean,
+    addImages: (List<ImageWithMetadata>) -> Unit,
+) {
+    var count by remember { mutableStateOf(0) }
+    Button(
+        onClick = {
+            coroutineScope.launch {
+                withContext(Dispatchers.IO) {
+                    filePicker(fileNameFilter).also {
+                        it.showOpenDialog(null).let { ret ->
+                            if (ret == JFileChooser.APPROVE_OPTION) {
+                                if (it.selectedFiles.isNullOrEmpty()) {
+                                    return@withContext
+                                }
+                                count = it.selectedFiles.size
+                                addImages(it.selectedFiles.map { s ->
+                                    ImageWithMetadata(
+                                        title = "",
+                                        description = "",
+                                        category = "",
+                                        keywords = listOf(),
+                                        file = s,
+                                        cacheKey = ""
+                                    )
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        enabled = !isProcessing,
+    ) {
+        Text("pilih gambar")
+    }
+    if (count > 0) {
+        Text("$count image(s)", color = MaterialTheme.colorScheme.onBackground)
+    }
+}
+
+@Composable
+fun ApiKeyField(
+    isProcessing: Boolean,
+    setApiKey: (String) -> Unit,
+) {
+    var isTyping by remember { mutableStateOf(false) }
+    var apiKey by remember { mutableStateOf("") }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        OutlinedTextField(
+            value = apiKey,
+            modifier = Modifier.weight(4f),
+            enabled = !isTyping && !isProcessing,
+            visualTransformation = PasswordVisualTransformation(),
+            onValueChange = { apiKey = it },
+            placeholder = { Text("gemini api key") },
+        )
+        if (isTyping) {
+            Button(
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    isTyping = !isTyping
+                    if (apiKey.isNotBlank()) {
+                        try {
+                            setApiKey(apiKey)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                },
+                enabled = !isProcessing
+            ) {
+                Text("simpan")
+            }
+        } else {
+            Button(
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    isTyping = !isTyping
+                },
+                enabled = !isProcessing
+            ) {
+                Text("edit")
+            }
+        }
+    }
+}
+
+@Composable
+fun ProcessField(
+    isProcessing: Boolean,
+    enableGenerateButton: Boolean,
+    generate: () -> Unit,
+) {
+    if (isProcessing) {
+        CircularProgressIndicator()
+    }
+    Button(
+        onClick = { generate() },
+        enabled = enableGenerateButton
+    ) {
+        Text("generate")
+    }
+    Button(
+        onClick = {}
+    ) {
+        Text("lihat hasil")
+    }
+}
+
 @Preview
 @Composable
 fun App() {
@@ -191,12 +375,10 @@ fun App() {
         "Image files (*.jpg, *.jpeg, *.png, *.eps)", "jpg", "jpeg", "png"
     )
     var apiKeyState by remember { mutableStateOf("") }
-    var isTypingApiKey by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
-    val objectMapper by lazy { ObjectMapper().registerModule(KotlinModule.Builder().build()) }
     var isProcessing by remember { mutableStateOf(false) }
 
-    val service by lazy { Service() }
+    val service = remember { Service() }
 
     Column {
         Row(
@@ -206,73 +388,28 @@ fun App() {
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row (
+            Row(
                 Modifier.weight(2f),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                Button(
-                    onClick = {
-                        coroutineScope.launch {
-                            withContext(Dispatchers.IO) {
-                                filePicker(fileNameFilter).also {
-                                    it.showOpenDialog(null).let { ret ->
-                                        if (ret == JFileChooser.APPROVE_OPTION) {
-                                            if (it.selectedFiles.isNullOrEmpty()) {
-                                                return@withContext
-                                            }
-                                            dirPath.clear()
-                                            dirPath.addAll(it.selectedFiles.map { s -> ImageWithMetadata(
-                                                title = "",
-                                                description = "",
-                                                category = "",
-                                                keywords = listOf(),
-                                                file = s,
-                                                cacheKey = ""
-                                            ) })
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    enabled = !isProcessing,
-                ) {
-                    Text("pilih gambar")
-                }
-                if (dirPath.isNotEmpty()) {
-                    Text("${dirPath.size} image(s)", color = MaterialTheme.colorScheme.onBackground)
-                }
-            }
-            Row(
-                Modifier.weight(3f).fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(24.dp)
-            ) {
-                OutlinedTextField(
-                    value = apiKeyState,
-                    modifier = Modifier.weight(4f),
-                    enabled = isTypingApiKey,
-                    visualTransformation = PasswordVisualTransformation(),
-                    onValueChange = { apiKeyState = it },
-                    placeholder = { Text("gemini api key") },
-                )
-                Button(
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        isTypingApiKey = !isTypingApiKey
-                        if (apiKeyState.isNotBlank()) {
-                            service.setApiKey(apiKeyState)
-                        }
-                    },
-                    enabled = !isProcessing
-                ) {
-                    if (isTypingApiKey) {
-                        Text("simpan")
-                    } else {
-                        Text("edit")
+                DirectoryChooserButton(
+                    coroutineScope = coroutineScope,
+                    fileNameFilter = fileNameFilter,
+                    isProcessing = isProcessing,
+                    addImages = {
+                        dirPath.clear()
+                        dirPath.addAll(it)
                     }
-                }
+                )
+            }
+            Box(
+                Modifier.weight(3f).fillMaxWidth()
+            ) {
+                ApiKeyField(
+                    isProcessing = isProcessing,
+                    setApiKey = { service.setApiKey(it) }
+                )
             }
             Row(
                 Modifier.weight(2f),
@@ -282,78 +419,29 @@ fun App() {
                 if (isProcessing) {
                     CircularProgressIndicator()
                 }
-                Button(
-                    onClick = {
+                ProcessField(
+                    isProcessing = isProcessing,
+                    enableGenerateButton = !isProcessing && apiKeyState.isNotBlank() && !dirPath.isEmpty(),
+                    generate = {
+                        isProcessing = true
                         coroutineScope.launch {
-                            isProcessing = true
-                            service.generate(dirPath.map(ImageWithMetadata::file))
-                                .also { res ->
-                                    println(res?.text())
-                                    val response = objectMapper.readValue(res?.text(), GenerateResponse::class.java)
-                                    val newSnapshot = response.metadata.map {
-                                        dirPath[it.imageIndex].let { img ->
-                                            img.title = it.title
-                                            img.description = it.description
-                                            img.category = it.category
-                                            img.keywords = it.keywords
-                                            img
-                                        }
-                                    }
+                            service.generate(dirPath)
+                                .also {
                                     dirPath.clear()
-                                    dirPath.addAll(newSnapshot)
+                                    dirPath.addAll(it)
                                     isProcessing = false
                                 }
                         }
-                    },
-                    enabled = !dirPath.isEmpty() && !isProcessing && apiKeyState.isNotBlank()
-                ) {
-                    Text("generate")
-                }
+                    }
+                )
             }
         }
 
-        LazyColumn(
-            Modifier
-                .background(MaterialTheme.colorScheme.background)
-                .fillMaxWidth()
-                .padding(24.dp)
-                .weight(10f),
-            verticalArrangement = Arrangement.spacedBy(32.dp),
+        Box(
+            Modifier.weight(10f)
+            .background(MaterialTheme.colorScheme.background)
         ) {
-            items(
-                count = dirPath.size,
-                key = { dirPath[it].file.absolutePath }
-            ) {
-                Card {
-                    Row(
-                        Modifier.fillMaxWidth()
-                    ) {
-                        Box(
-                            modifier = Modifier.weight(1f)
-                                .background(MaterialTheme.colorScheme.secondary)
-                        ) {
-                            Image(
-                                bitmap = decodeBitmap(dirPath[it]),
-                                contentDescription = "placeholder",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.aspectRatio(1f)
-                            )
-                        }
-                        Column (
-                            modifier = Modifier.weight(5f)
-                                .padding(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(dirPath[it].file.name)
-                            Text("title: ${dirPath[it].title}")
-                            Text("description: ${dirPath[it].description}")
-                            Text("category: ${dirPath[it].category}")
-                            Text("keywords: ${dirPath[it].keywords.joinToString(", ")}")
-
-                        }
-                    }
-                }
-            }
+            ImageColumn(dirPath)
         }
     }
 }

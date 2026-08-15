@@ -16,12 +16,11 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation("org.jetbrains.compose.material3:material3:1.9.0")
     implementation("com.google.genai:google-genai:1.66.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.2")
-    implementation("org.slf4j:slf4j-api:2.0.12")
-    implementation("org.bouncycastle:bctls-jdk18on:1.78.1")
-    implementation("org.conscrypt:conscrypt-openjdk-uber:2.5.2")
+
+    implementation("org.jetbrains.exposed:exposed-core:1.4.0")
+    implementation("org.jetbrains.exposed:exposed-jdbc:1.4.0")
+    implementation("org.xerial:sqlite-jdbc:3.53.2.1")
 
     testImplementation(kotlin("test"))
 }
@@ -42,7 +41,7 @@ compose.desktop {
             "-XX:+UseG1GC"
         )
         buildTypes.release.proguard {
-            configurationFiles.from(project.file("proguard-rules.pro"))
+            isEnabled = false
         }
     }
 }

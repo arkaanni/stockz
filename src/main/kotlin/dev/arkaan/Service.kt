@@ -1,5 +1,7 @@
 package dev.arkaan
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.google.genai.Client
 import com.google.genai.types.*
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +15,7 @@ class Service {
         "AI", "vector", "AI-generated", "ui", "ux", "ui/ux", "design", "graphic"
     )
 
+    private val objectMapper by lazy { ObjectMapper().registerModule(KotlinModule.Builder().build()) }
 
     companion object {
         private val categories = mapOf(
@@ -38,33 +41,40 @@ class Service {
             "Transport" to 20,
             "Travel" to 21
         )
-
-        private val schema = Schema.builder()
-            .type(Type.Known.OBJECT)
-            .properties(mapOf(
-                "metadata" to Schema.builder()
-                    .type(Type.Known.ARRAY)
-                    .items(Schema.builder()
-                        .type(Type.Known.OBJECT)
-                        .properties(mapOf(
-                            "imageIndex" to Schema.builder().type(Type.Known.INTEGER).build(),
-                            "title" to Schema.builder().type(Type.Known.STRING).build(),
-                            "description" to Schema.builder().type(Type.Known.STRING).build(),
-                            "category" to Schema.builder().type(Type.Known.STRING).build(),
-                            "keywords" to Schema.builder().type(Type.Known.ARRAY)
-                                .items(Schema.builder().type(Type.Known.STRING).build())
-                                .build()
-                        )).build()
-            ).build()))
-            .build()
+        private val jsonSchema = """
+            {
+                "type": "object",
+                "properties": {
+                    "metadata": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "imageIndex": { "type": "integer" },
+                                "title": { "type": "string" },
+                                "description": { "type": "string" },
+                                "category": { "type": "string" },
+                                "keywords": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            "required": ["imageIndex", "title", "description", "category", "keywords"]
+                        }
+                    }
+                },
+                "required": ["metadata"]
+            }
+        """.trimIndent()
 
         private val responseConfig = GenerateContentConfig.builder()
             .responseMimeType("application/json")
-            .responseSchema(schema)
+            .responseSchema(Schema.fromJson(jsonSchema))
             .build()
 
     }
-
 
 
     private fun buildPrompt(imageCount: Int) =
@@ -77,8 +87,6 @@ class Service {
         """.trimIndent()
 
     fun setApiKey(apiKey: String) {
-        println("categories: ${categories.keys.joinToString(", ")}")
-        println("apiKey = $apiKey")
         client = null
         this.apiKey = apiKey
         Client.builder()
@@ -86,23 +94,36 @@ class Service {
             .build().also {
                 client = it
             }
-        println("client created: $client")
     }
 
-    suspend fun generate(files: List<File>): GenerateContentResponse? = withContext(Dispatchers.IO) {
-        val prompt = Part.fromText(buildPrompt(files.size))
-        val contents = files.map { file -> Part.fromBytes(
-            file.readBytes(),
-            "image/${file.extension}"
-        ) }.toTypedArray()
-        println(client)
+    suspend fun generate(images: List<ImageWithMetadata>): List<ImageWithMetadata> = withContext(Dispatchers.IO) {
+        val prompt = Part.fromText(buildPrompt(images.size))
+        val contents = images.map { img ->
+            Part.fromBytes(
+                img.file.readBytes(),
+                "image/${img.file.extension}"
+            )
+        }.toTypedArray()
         if (client == null) {
             println("No client found")
         }
-        client?.models?.generateContent(
+        val res = client?.models?.generateContent(
             "gemini-3.1-flash-lite",
             Content.fromParts(*contents, prompt),
             responseConfig
         )
+        val response = objectMapper.readValue(res?.text(), GenerateResponse::class.java)
+        val newSnapshot = response.metadata.map {
+            images[it.imageIndex].let { img ->
+                img.title = it.title
+                img.description = it.description
+                img.category = it.category
+                img.keywords = it.keywords
+                img
+            }
+        }
+        val resultId = Repository.insertResult()
+        Repository.insert(newSnapshot, resultId)
+        newSnapshot
     }
 }

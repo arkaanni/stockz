@@ -35,9 +35,11 @@ compose.desktop {
         nativeDistributions {
             packageName = "stockz"
             packageVersion = "1.0.0"
+
+            modules("java.sql")
         }
         jvmArgs += listOf(
-            "-Xmx384m",
+            "-Xmx1G",
             "-XX:+UseG1GC"
         )
         buildTypes.release.proguard {

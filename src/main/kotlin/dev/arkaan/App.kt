@@ -14,15 +14,12 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.annotation.JsonSerialize
-import com.fasterxml.jackson.module.kotlin.KotlinModule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -77,7 +74,7 @@ data class ImageWithMetadata(
     var title: String,
     var description: String,
     var category: String,
-    var keywords: List<String>,
+    var keywords: String,
     var file: File
 )
 
@@ -225,7 +222,7 @@ fun ImageColumn(
                         Text("title: ${images[it].title}")
                         Text("description: ${images[it].description}")
                         Text("category: ${images[it].category}")
-                        Text("keywords: ${images[it].keywords.joinToString(", ")}")
+                        Text("keywords: ${images[it].keywords}")
 
                     }
                 }
@@ -235,17 +232,30 @@ fun ImageColumn(
 }
 
 @Composable
-fun ResultPage() {
-    Column {
-        Row(
+fun ResultPage(
+    goBack: () -> Unit,
+    images: List<ImageWithMetadata>,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth()
+                .padding(16.dp),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            Button(onClick = { goBack() }) {
+                Text("kembali")
+            }
+        }
+        Box(
             Modifier.weight(2f)
-                .background(MaterialTheme.colorScheme.background)
                 .padding(24.dp, 0.dp)
                 .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.End)
+            contentAlignment = Alignment.Center
         ) {
-
+            ImageColumn(images)
         }
     }
 }
@@ -274,7 +284,7 @@ fun DirectoryChooserButton(
                                         title = "",
                                         description = "",
                                         category = "",
-                                        keywords = listOf(),
+                                        keywords = "",
                                         file = s,
                                         cacheKey = ""
                                     )
@@ -297,21 +307,22 @@ fun DirectoryChooserButton(
 @Composable
 fun ApiKeyField(
     isProcessing: Boolean,
+    apiKey: String,
     setApiKey: (String) -> Unit,
 ) {
     var isTyping by remember { mutableStateOf(false) }
-    var apiKey by remember { mutableStateOf("") }
+    var apiKeyState by remember { mutableStateOf(apiKey) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         OutlinedTextField(
-            value = apiKey,
+            value = apiKeyState,
             modifier = Modifier.weight(4f),
-            enabled = !isTyping && !isProcessing,
+            enabled = isTyping && !isProcessing,
             visualTransformation = PasswordVisualTransformation(),
-            onValueChange = { apiKey = it },
+            onValueChange = { apiKeyState = it },
             placeholder = { Text("gemini api key") },
         )
         if (isTyping) {
@@ -319,9 +330,9 @@ fun ApiKeyField(
                 modifier = Modifier.weight(1f),
                 onClick = {
                     isTyping = !isTyping
-                    if (apiKey.isNotBlank()) {
+                    if (apiKeyState.isNotBlank()) {
                         try {
-                            setApiKey(apiKey)
+                            setApiKey(apiKeyState)
                         } catch (e: Exception) {
                             e.printStackTrace()
                         }
@@ -350,6 +361,7 @@ fun ProcessField(
     isProcessing: Boolean,
     enableGenerateButton: Boolean,
     generate: () -> Unit,
+    showResult: () -> Unit,
 ) {
     if (isProcessing) {
         CircularProgressIndicator()
@@ -361,7 +373,7 @@ fun ProcessField(
         Text("generate")
     }
     Button(
-        onClick = {}
+        onClick = { showResult() }
     ) {
         Text("lihat hasil")
     }
@@ -374,74 +386,86 @@ fun App() {
     val fileNameFilter = FileNameExtensionFilter(
         "Image files (*.jpg, *.jpeg, *.png, *.eps)", "jpg", "jpeg", "png"
     )
-    var apiKeyState by remember { mutableStateOf("") }
+    var apiKeySet by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     var isProcessing by remember { mutableStateOf(false) }
+    var displayResult by remember { mutableStateOf(false) }
 
     val service = remember { Service() }
 
-    Column {
-        Row(
-            Modifier.weight(2f)
-                .background(MaterialTheme.colorScheme.background)
-                .padding(24.dp, 0.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    if (displayResult) {
+        ResultPage(
+            images = service.getResult(),
+            goBack = { displayResult = false }
+        )
+    } else {
+        Column {
             Row(
-                Modifier.weight(2f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(24.dp)
-            ) {
-                DirectoryChooserButton(
-                    coroutineScope = coroutineScope,
-                    fileNameFilter = fileNameFilter,
-                    isProcessing = isProcessing,
-                    addImages = {
-                        dirPath.clear()
-                        dirPath.addAll(it)
-                    }
-                )
-            }
-            Box(
-                Modifier.weight(3f).fillMaxWidth()
-            ) {
-                ApiKeyField(
-                    isProcessing = isProcessing,
-                    setApiKey = { service.setApiKey(it) }
-                )
-            }
-            Row(
-                Modifier.weight(2f),
-                horizontalArrangement = Arrangement.spacedBy(24.dp, alignment = Alignment.End),
+                Modifier.weight(2f)
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(24.dp, 0.dp)
+                    .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isProcessing) {
-                    CircularProgressIndicator()
-                }
-                ProcessField(
-                    isProcessing = isProcessing,
-                    enableGenerateButton = !isProcessing && apiKeyState.isNotBlank() && !dirPath.isEmpty(),
-                    generate = {
-                        isProcessing = true
-                        coroutineScope.launch {
-                            service.generate(dirPath)
-                                .also {
-                                    dirPath.clear()
-                                    dirPath.addAll(it)
-                                    isProcessing = false
-                                }
+                Row(
+                    Modifier.weight(2f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
+                    DirectoryChooserButton(
+                        coroutineScope = coroutineScope,
+                        fileNameFilter = fileNameFilter,
+                        isProcessing = isProcessing,
+                        addImages = {
+                            dirPath.clear()
+                            dirPath.addAll(it)
                         }
-                    }
-                )
+                    )
+                }
+                Box(
+                    Modifier.weight(3f).fillMaxWidth()
+                ) {
+                    ApiKeyField(
+                        apiKey = service.getApiKey() ?: "",
+                        isProcessing = isProcessing,
+                        setApiKey = {
+                            service.setApiKey(it)
+                            apiKeySet = true
+                        }
+                    )
+                }
+                Row(
+                    Modifier.weight(2f),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp, alignment = Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ProcessField(
+                        isProcessing = isProcessing,
+                        enableGenerateButton = !isProcessing && apiKeySet && !dirPath.isEmpty(),
+                        generate = {
+                            isProcessing = true
+                            coroutineScope.launch {
+                                service.generate(dirPath)
+                                    .also {
+                                        dirPath.clear()
+                                        dirPath.addAll(it)
+                                        isProcessing = false
+                                    }
+                            }
+                        },
+                        showResult = {
+                            displayResult = true
+                        }
+                    )
+                }
             }
-        }
 
-        Box(
-            Modifier.weight(10f)
-            .background(MaterialTheme.colorScheme.background)
-        ) {
-            ImageColumn(dirPath)
+            Box(
+                Modifier.weight(10f)
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                ImageColumn(dirPath)
+            }
         }
     }
 }

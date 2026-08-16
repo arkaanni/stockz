@@ -3,10 +3,12 @@ package dev.arkaan
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.google.genai.Client
-import com.google.genai.types.*
+import com.google.genai.types.Content
+import com.google.genai.types.GenerateContentConfig
+import com.google.genai.types.Part
+import com.google.genai.types.Schema
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 
 class Service {
     private var apiKey: String? = null
@@ -96,6 +98,8 @@ class Service {
             }
     }
 
+    fun getApiKey() = apiKey
+
     suspend fun generate(images: List<ImageWithMetadata>): List<ImageWithMetadata> = withContext(Dispatchers.IO) {
         val prompt = Part.fromText(buildPrompt(images.size))
         val contents = images.map { img ->
@@ -118,7 +122,7 @@ class Service {
                 img.title = it.title
                 img.description = it.description
                 img.category = it.category
-                img.keywords = it.keywords
+                img.keywords = it.keywords.joinToString(", ")
                 img
             }
         }
@@ -126,4 +130,6 @@ class Service {
         Repository.insert(newSnapshot, resultId)
         newSnapshot
     }
+
+    fun getResult(): List<ImageWithMetadata> = Repository.getResult()
 }

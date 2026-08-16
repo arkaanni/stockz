@@ -2,12 +2,9 @@ package dev.arkaan
 
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.Table
-import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.batchInsert
-import org.jetbrains.exposed.v1.jdbc.deleteAll
-import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import java.io.File
 
 object ImageMetadata : Table("image_metadata") {
     val id = integer("id").autoIncrement()
@@ -39,7 +36,7 @@ object Repository {
         )
 
         transaction(db) {
-            SchemaUtils.drop(GenerateResult, ImageMetadata)
+//            SchemaUtils.drop(GenerateResult, ImageMetadata)
             SchemaUtils.create(GenerateResult)
             SchemaUtils.create(ImageMetadata)
         }
@@ -57,11 +54,24 @@ object Repository {
                 this[ImageMetadata.title] = img.title
                 this[ImageMetadata.description] = img.description
                 this[ImageMetadata.category] = img.category
-                this[ImageMetadata.keywords] = img.keywords.joinToString(",")
+                this[ImageMetadata.keywords] = img.keywords
                 this[ImageMetadata.filePath] = img.file.absolutePath
                 this[ImageMetadata.cacheKey] = img.cacheKey
                 this[ImageMetadata.generateId] = resultId
             }
+        }
+    }
+
+    fun getResult(): List<ImageWithMetadata> = transaction(db) {
+        ImageMetadata.selectAll().map {
+            ImageWithMetadata(
+                title = it[ImageMetadata.title],
+                description = it[ImageMetadata.description],
+                category = it[ImageMetadata.category],
+                keywords = it[ImageMetadata.keywords],
+                cacheKey = it[ImageMetadata.cacheKey],
+                file = File(it[ImageMetadata.filePath]),
+            )
         }
     }
 

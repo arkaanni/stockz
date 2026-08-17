@@ -4,6 +4,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -196,7 +200,7 @@ fun ImageColumn(
     ) {
         items(
             count = images.size,
-            key = { images[it].file.absolutePath }
+            key = { "${images[it].file.absolutePath}_$it" }
         ) {
             Card {
                 Row(
@@ -234,8 +238,11 @@ fun ImageColumn(
 @Composable
 fun ResultPage(
     goBack: () -> Unit,
-    images: List<ImageWithMetadata>,
+    retrieveData: (currentId: Int, navigation: Service.ResultNavigation) -> MetadataResult
 ) {
+    var currentId by remember { mutableStateOf(1) }
+    var metadataResult by remember { mutableStateOf(retrieveData(currentId, Service.ResultNavigation.FIRST)) }
+
     Column(
         modifier = Modifier.fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
@@ -245,7 +252,13 @@ fun ResultPage(
                 .padding(16.dp),
             contentAlignment = Alignment.CenterEnd
         ) {
-            Button(onClick = { goBack() }) {
+            Button(
+                onClick = { goBack() },
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Default.ArrowBack,
+                    contentDescription = "kembali",
+                )
                 Text("kembali")
             }
         }
@@ -255,7 +268,53 @@ fun ResultPage(
                 .fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            ImageColumn(images)
+            ImageColumn(metadataResult.images)
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .padding(24.dp, 0.dp, 24.dp, 24.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            IconButton(
+                onClick = {},
+                colors = IconButtonDefaults.filledIconButtonColors()
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Default.List,
+                    contentDescription = "list",
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                IconButton(
+                    onClick = {},
+                    colors = IconButtonDefaults.filledIconButtonColors()
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Default.ArrowBack,
+                        contentDescription = "previous",
+                    )
+                }
+                IconButton(
+                    onClick = { metadataResult = retrieveData(currentId, Service.ResultNavigation.NEXT) },
+                    colors = IconButtonDefaults.filledIconButtonColors()
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Default.ArrowForward,
+                        contentDescription = "next",
+                    )
+                }
+            }
+            IconButton(
+                onClick = {},
+                colors = IconButtonDefaults.filledIconButtonColors()
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Default.List,
+                    contentDescription = "list",
+                )
+            }
         }
     }
 }
@@ -395,8 +454,10 @@ fun App() {
 
     if (displayResult) {
         ResultPage(
-            images = service.getResult(),
-            goBack = { displayResult = false }
+            goBack = { displayResult = false },
+            retrieveData = { currentId, navigation ->
+                service.getResult(currentId, navigation)
+            }
         )
     } else {
         Column {

@@ -17,6 +17,12 @@ class Service {
         "AI", "vector", "AI-generated", "ui", "ux", "ui/ux", "design", "graphic"
     )
 
+    enum class ResultNavigation {
+        FIRST,
+        NEXT,
+        PREVIOUS
+    }
+
     private val objectMapper by lazy { ObjectMapper().registerModule(KotlinModule.Builder().build()) }
 
     companion object {
@@ -131,5 +137,12 @@ class Service {
         newSnapshot
     }
 
-    fun getResult(): List<ImageWithMetadata> = Repository.getResult()
+    fun getResult(currentId: Int = 1, navigation: ResultNavigation): MetadataResult {
+        val nextId = when (navigation) {
+            ResultNavigation.FIRST -> 1
+            ResultNavigation.NEXT -> Repository.getNextResultId(currentId)
+            ResultNavigation.PREVIOUS -> 1
+        }
+        return Repository.getResult(nextId)
+    }
 }

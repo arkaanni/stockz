@@ -14,7 +14,8 @@ repositories {
 
 dependencies {
     implementation(compose.desktop.currentOs)
-    implementation("org.jetbrains.compose.material3:material3:1.9.0")
+    implementation("org.jetbrains.compose.material3:material3-desktop:1.9.0")
+    implementation("org.jetbrains.compose.material:material-icons-core-desktop:1.7.3")
     implementation("com.google.genai:google-genai:1.66.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.2")
 

@@ -2,6 +2,8 @@ package dev.arkaan
 
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.io.File
@@ -25,6 +27,11 @@ object GenerateResult : Table("generate_result") {
 
     override val primaryKey = PrimaryKey(id)
 }
+
+data class MetadataResult(
+    val images: List<ImageWithMetadata>,
+    val resultId: Int
+)
 
 object Repository {
     private lateinit var db: Database
@@ -62,17 +69,27 @@ object Repository {
         }
     }
 
-    fun getResult(): List<ImageWithMetadata> = transaction(db) {
-        ImageMetadata.selectAll().map {
-            ImageWithMetadata(
-                title = it[ImageMetadata.title],
-                description = it[ImageMetadata.description],
-                category = it[ImageMetadata.category],
-                keywords = it[ImageMetadata.keywords],
-                cacheKey = it[ImageMetadata.cacheKey],
-                file = File(it[ImageMetadata.filePath]),
-            )
-        }
+    fun getNextResultId(currentId: Int): Int = transaction(db) {
+        GenerateResult.select(GenerateResult.id)
+            .where { GenerateResult.id greater currentId }
+            .limit(1)
+            .singleOrNull()?.get(GenerateResult.id) ?: 1
+    }
+
+    fun getResult(nextId: Int): MetadataResult = transaction(db) {
+        val images = ImageMetadata.selectAll()
+            .where { ImageMetadata.generateId eq nextId }
+            .map {
+                ImageWithMetadata(
+                    title = it[ImageMetadata.title],
+                    description = it[ImageMetadata.description],
+                    category = it[ImageMetadata.category],
+                    keywords = it[ImageMetadata.keywords],
+                    cacheKey = it[ImageMetadata.cacheKey],
+                    file = File(it[ImageMetadata.filePath]),
+                )
+            }
+        MetadataResult(images = images, resultId = nextId)
     }
 
     fun deleteAll() {

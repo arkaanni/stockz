@@ -1,9 +1,11 @@
 package dev.arkaan
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.Divider
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -18,16 +20,26 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import com.fasterxml.jackson.databind.annotation.JsonSerialize
+import dev.arkaan.domain.ImageWithMetadata
+import dev.arkaan.domain.MetadataResult
+import dev.arkaan.domain.ResultNavigation
+import dev.arkaan.repository.ImagePreviewRepository
+import dev.arkaan.repository.Repository
+import dev.arkaan.service.GenerateService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.coobird.thumbnailator.Thumbnailator
+import net.coobird.thumbnailator.Thumbnails
+import net.coobird.thumbnailator.resizers.configurations.ScalingMode
 import java.awt.Dimension
 import java.io.File
 import javax.imageio.ImageIO
@@ -73,38 +85,10 @@ val colorScheme = darkColorScheme(
     surfaceContainerHighest = surfaceContainerHighestDark,
 )
 
-data class ImageWithMetadata(
-    var cacheKey: String,
-    var title: String,
-    var description: String,
-    var category: String,
-    var keywords: String,
-    var file: File
-)
-
-object PreviewImageCache {
-    private const val MAX_ITEMS = 50
-    private val cache = object : LinkedHashMap<String, ImageBitmap>(
-        MAX_ITEMS, 0.75f, true
-    ) {
-        override fun removeEldestEntry(eldest: Map.Entry<String?, ImageBitmap?>?): Boolean {
-            return size > MAX_ITEMS
-        }
-    }
-
-    @Synchronized
-    fun get(key: String): ImageBitmap? = cache[key]
-
-    @Synchronized
-    fun put(key: String, bitmap: ImageBitmap) {
-        cache[key] = bitmap
-    }
-}
-
 @Composable
 fun decodeBitmap(img: ImageWithMetadata): ImageBitmap {
     val cacheKey = "${img.file.absolutePath}"
-    val cachedPreview = PreviewImageCache.get(cacheKey)
+    val cachedPreview = ImagePreviewRepository.get(cacheKey)
     if (cachedPreview != null) {
         return cachedPreview
     }
@@ -114,51 +98,56 @@ fun decodeBitmap(img: ImageWithMetadata): ImageBitmap {
         key1 = img.file.absolutePath
     ) {
         withContext(Dispatchers.IO) {
-            val imageInputStream = ImageIO.createImageInputStream(img.file)
-            val imageReaders = ImageIO.getImageReaders(imageInputStream)
-            val imageReader = imageReaders.next()
-            try {
-                val param = imageReader.apply {
-                    input = imageInputStream
-                }.let {
-                    val origWidth = it.getWidth(0)
-                    val origHeight = it.getHeight(0)
+//            val thumbnail = Thumbnailator
+//                .createThumbnail(img.file, 300, 300)
 
-                    if (origWidth > 240 && origHeight > 240) {
-                        val subX = origWidth / (if (origWidth > origHeight) 240 else 180)
-                        val subY = origHeight / (if (origHeight > origWidth) 240 else 180)
-                        it.defaultReadParam.apply {
-                            setSourceSubsampling(subX, subY, 0, 0)
-                        }
-                    }
-                    it.defaultReadParam
-                }
-                value = imageReader.read(0, param).toComposeImageBitmap()
-                PreviewImageCache.put(cacheKey, value!!)
-                img.cacheKey = cacheKey
-            } finally {
-                imageReader.dispose()
-                imageInputStream.close()
-            }
+
+            val thumbnail = Thumbnails.of(img.file)
+                .size(200, 200)
+                .keepAspectRatio(true)
+//                .scale(0.2)
+                .scalingMode(ScalingMode.BICUBIC)
+                .outputQuality(0.85)
+                .asBufferedImage()
+
+            ImageIO.write(thumbnail, "jpg", File("${img.file.absolutePath}_temp.jpg"))
+
+            value = thumbnail.toComposeImageBitmap()
+            ImagePreviewRepository.put(cacheKey, value!!)
+            img.cacheKey = cacheKey
+
+//            val imageInputStream = ImageIO.createImageInputStream(img.file)
+//            val imageReaders = ImageIO.getImageReaders(imageInputStream)
+//            val imageReader = imageReaders.next()
+//            try {
+//                val param = imageReader.apply {
+//                    input = imageInputStream
+//                }.let {
+//                    val origWidth = it.getWidth(0)
+//                    val origHeight = it.getHeight(0)
+//
+//                    if (origWidth > 240 && origHeight > 240) {
+//                        val subX = origWidth / (if (origWidth > origHeight) 240 else 180)
+//                        val subY = origHeight / (if (origHeight > origWidth) 240 else 180)
+//                        it.defaultReadParam.apply {
+//                            setSourceSubsampling(subX, subY, 0, 0)
+//                        }
+//                    }
+//                    it.defaultReadParam
+//                }
+//                val image = imageReader.read(0, param)
+//                value = image.toComposeImageBitmap()
+//                ImagePreviewRepository.put(cacheKey, value!!)
+//                img.cacheKey = cacheKey
+//            } finally {
+//                imageReader.dispose()
+//                imageInputStream.close()
+//            }
         }
 
     }
     return state.value ?: ImageBitmap(200, 200, colorSpace = ColorSpaces.Srgb)
 }
-
-@JsonSerialize
-data class MetadataResponse(
-    val imageIndex: Int,
-    val title: String,
-    val description: String,
-    val category: String,
-    val keywords: List<String>,
-)
-
-@JsonSerialize
-data class GenerateResponse(
-    val metadata: List<MetadataResponse>,
-)
 
 fun main() {
     Repository.initialize()
@@ -189,6 +178,27 @@ fun filePicker(fileNamFilter: FileFilter): JFileChooser = JFileChooser().apply {
 }
 
 @Composable
+fun SmallText(text: String) {
+    Text(
+        fontSize = 16.sp,
+        text = text,
+    )
+}
+
+@Composable
+fun TableRow(header: String, text: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(modifier = Modifier.weight(1f), text = header)
+        Text(modifier = Modifier.weight(7f), text = text)
+    }
+}
+
+@Composable
+fun RowDivider() = Divider(color = MaterialTheme.colorScheme.secondary, thickness = Dp(0.5f))
+
+@Composable
 fun ImageColumn(
     images: List<ImageWithMetadata>
 ) {
@@ -202,10 +212,12 @@ fun ImageColumn(
             count = images.size,
             key = { "${images[it].file.absolutePath}_$it" }
         ) {
-            Card {
-                Row(
-                    Modifier.fillMaxWidth()
-                ) {
+            Card(
+                modifier = Modifier
+//                    .aspectRatio(16f / 9f)
+                    .height(IntrinsicSize.Min)
+            ) {
+                Row {
                     Box(
                         modifier = Modifier.weight(1f)
                             .background(MaterialTheme.colorScheme.secondary)
@@ -214,20 +226,20 @@ fun ImageColumn(
                             bitmap = decodeBitmap(images[it]),
                             contentDescription = "placeholder",
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.aspectRatio(1f)
+                            modifier = Modifier
+                                .fillMaxSize()
                         )
                     }
                     Column(
-                        modifier = Modifier.weight(5f)
-                            .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(4f)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Text(images[it].file.name)
-                        Text("title: ${images[it].title}")
-                        Text("description: ${images[it].description}")
-                        Text("category: ${images[it].category}")
-                        Text("keywords: ${images[it].keywords}")
-
+                        TableRow("title", images[it].title)
+                        TableRow("description", images[it].description)
+                        TableRow("category", images[it].category)
+                        TableRow("keywords", images[it].keywords)
                     }
                 }
             }
@@ -238,10 +250,10 @@ fun ImageColumn(
 @Composable
 fun ResultPage(
     goBack: () -> Unit,
-    retrieveData: (currentId: Int, navigation: Service.ResultNavigation) -> MetadataResult
+    retrieveData: (currentId: Int, navigation: ResultNavigation) -> MetadataResult
 ) {
     var currentId by remember { mutableStateOf(1) }
-    var metadataResult by remember { mutableStateOf(retrieveData(currentId, Service.ResultNavigation.FIRST)) }
+    var metadataResult by remember { mutableStateOf(retrieveData(currentId, ResultNavigation.FIRST)) }
 
     Column(
         modifier = Modifier.fillMaxSize()
@@ -297,7 +309,7 @@ fun ResultPage(
                     )
                 }
                 IconButton(
-                    onClick = { metadataResult = retrieveData(currentId, Service.ResultNavigation.NEXT) },
+                    onClick = { metadataResult = retrieveData(currentId, ResultNavigation.NEXT) },
                     colors = IconButtonDefaults.filledIconButtonColors()
                 ) {
                     Icon(
@@ -450,13 +462,13 @@ fun App() {
     var isProcessing by remember { mutableStateOf(false) }
     var displayResult by remember { mutableStateOf(false) }
 
-    val service = remember { Service() }
+    val generateService = remember { GenerateService() }
 
     if (displayResult) {
         ResultPage(
             goBack = { displayResult = false },
             retrieveData = { currentId, navigation ->
-                service.getResult(currentId, navigation)
+                generateService.getResult(currentId, navigation)
             }
         )
     } else {
@@ -487,10 +499,10 @@ fun App() {
                     Modifier.weight(3f).fillMaxWidth()
                 ) {
                     ApiKeyField(
-                        apiKey = service.getApiKey() ?: "",
+                        apiKey = generateService.getApiKey() ?: "",
                         isProcessing = isProcessing,
                         setApiKey = {
-                            service.setApiKey(it)
+                            generateService.setApiKey(it)
                             apiKeySet = true
                         }
                     )
@@ -506,7 +518,7 @@ fun App() {
                         generate = {
                             isProcessing = true
                             coroutineScope.launch {
-                                service.generate(dirPath)
+                                generateService.generate(dirPath)
                                     .also {
                                         dirPath.clear()
                                         dirPath.addAll(it)

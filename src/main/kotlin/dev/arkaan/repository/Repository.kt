@@ -1,37 +1,13 @@
-package dev.arkaan
+package dev.arkaan.repository
 
-import org.jetbrains.exposed.v1.core.ReferenceOption
-import org.jetbrains.exposed.v1.core.Table
+import dev.arkaan.domain.ImageWithMetadata
+import dev.arkaan.domain.MetadataResult
+import dev.arkaan.repository.model.*
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.io.File
-
-object ImageMetadata : Table("image_metadata") {
-    val id = integer("id").autoIncrement()
-    val generateId = integer("generate_id")
-        .references(GenerateResult.id, onDelete = ReferenceOption.CASCADE)
-    val title = varchar("title", 255)
-    val description = varchar("description", 1000)
-    val category = varchar("category", 20)
-    val keywords = varchar("keywords", 1000)
-    val filePath = varchar("file_path", 255)
-    val cacheKey = varchar("cache_key", 255)
-
-    override val primaryKey = PrimaryKey(id)
-}
-
-object GenerateResult : Table("generate_result") {
-    val id = integer("id").autoIncrement()
-
-    override val primaryKey = PrimaryKey(id)
-}
-
-data class MetadataResult(
-    val images: List<ImageWithMetadata>,
-    val resultId: Int
-)
 
 object Repository {
     private lateinit var db: Database
@@ -51,7 +27,7 @@ object Repository {
 
     fun insertResult(): Int {
         return transaction(db) {
-            GenerateResult.insert {  } get GenerateResult.id
+            GenerateResult.insert { } get GenerateResult.id
         }
     }
 

@@ -19,6 +19,8 @@ dependencies {
     implementation("com.google.genai:google-genai:1.66.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.2")
 
+    implementation("net.coobird:thumbnailator:0.4.21")
+
     implementation("org.jetbrains.exposed:exposed-core:1.4.0")
     implementation("org.jetbrains.exposed:exposed-jdbc:1.4.0")
     implementation("org.xerial:sqlite-jdbc:3.53.2.1")

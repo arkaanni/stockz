@@ -1,4 +1,4 @@
-package dev.arkaan
+package dev.arkaan.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
@@ -7,21 +7,20 @@ import com.google.genai.types.Content
 import com.google.genai.types.GenerateContentConfig
 import com.google.genai.types.Part
 import com.google.genai.types.Schema
+import dev.arkaan.domain.GenerateResponse
+import dev.arkaan.domain.ImageWithMetadata
+import dev.arkaan.domain.MetadataResult
+import dev.arkaan.domain.ResultNavigation
+import dev.arkaan.repository.Repository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class Service {
+class GenerateService {
     private var apiKey: String? = null
     private var client: Client? = null
     private val negativeKeywords = arrayOf(
         "AI", "vector", "AI-generated", "ui", "ux", "ui/ux", "design", "graphic"
     )
-
-    enum class ResultNavigation {
-        FIRST,
-        NEXT,
-        PREVIOUS
-    }
 
     private val objectMapper by lazy { ObjectMapper().registerModule(KotlinModule.Builder().build()) }
 

@@ -1,4 +1,6 @@
-package dev.arkaan
+package dev.arkaan.service
+
+import dev.arkaan.domain.ImageWithMetadata
 
 object CsvService {
     fun generateCsv(images: List<ImageWithMetadata>) {

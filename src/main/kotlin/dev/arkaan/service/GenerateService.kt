@@ -1,7 +1,6 @@
 package dev.arkaan.service
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.KotlinModule
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.google.genai.Client
 import com.google.genai.types.Content
 import com.google.genai.types.GenerateContentConfig
@@ -22,7 +21,7 @@ class GenerateService {
         "AI", "vector", "AI-generated", "ui", "ux", "ui/ux", "design", "graphic"
     )
 
-    private val objectMapper by lazy { ObjectMapper().registerModule(KotlinModule.Builder().build()) }
+    private val objectMapper by lazy { jacksonObjectMapper() }
 
     companion object {
         private val categories = mapOf(
@@ -136,12 +135,15 @@ class GenerateService {
         newSnapshot
     }
 
-    fun getResult(currentId: Int = 1, navigation: ResultNavigation): MetadataResult {
+    suspend fun getResult(
+        currentId: Int = 1,
+        navigation: ResultNavigation
+    ): MetadataResult = withContext(Dispatchers.IO) {
         val nextId = when (navigation) {
             ResultNavigation.FIRST -> 1
             ResultNavigation.NEXT -> Repository.getNextResultId(currentId)
             ResultNavigation.PREVIOUS -> 1
         }
-        return Repository.getResult(nextId)
+        Repository.getResult(nextId)
     }
 }

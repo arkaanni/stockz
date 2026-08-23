@@ -2,7 +2,8 @@ package dev.arkaan.repository
 
 import dev.arkaan.domain.ImageWithMetadata
 import dev.arkaan.domain.MetadataResult
-import dev.arkaan.repository.model.*
+import dev.arkaan.repository.model.GenerateResult
+import dev.arkaan.repository.model.ImageMetadata
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.jdbc.*

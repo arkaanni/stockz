@@ -4,9 +4,8 @@ import dev.arkaan.domain.ImageWithMetadata
 import dev.arkaan.domain.MetadataResult
 import dev.arkaan.repository.model.GenerateResult
 import dev.arkaan.repository.model.ImageMetadata
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.coroutineScope
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
@@ -38,26 +37,22 @@ object Repository {
         }
     }
 
-    suspend fun getLastResultId(): Int? = withContext(Dispatchers.IO) {
-        transaction(db) {
-            GenerateResult.select(GenerateResult.id)
-                .orderBy(GenerateResult.id to SortOrder.DESC)
-                .limit(1)
-                .firstOrNull()?.get(GenerateResult.id)
-        }
+    suspend fun getLastResultId(): Int? = suspendTransaction(db) {
+        GenerateResult.select(GenerateResult.id)
+            .orderBy(GenerateResult.id to SortOrder.DESC)
+            .limit(1)
+            .firstOrNull()?.get(GenerateResult.id)
     }
 
-    suspend fun insert(images: List<ImageWithMetadata>, resultId: Int) = withContext(Dispatchers.IO) {
-        transaction(db) {
-            ImageMetadata.batchInsert(images) { img ->
-                this[ImageMetadata.title] = img.title
-                this[ImageMetadata.description] = img.description
-                this[ImageMetadata.category] = img.category
-                this[ImageMetadata.keywords] = img.keywords
-                this[ImageMetadata.filePath] = img.file.absolutePath
-                this[ImageMetadata.cacheKey] = img.cacheKey
-                this[ImageMetadata.generateId] = resultId
-            }
+    suspend fun insert(images: List<ImageWithMetadata>, resultId: Int) = suspendTransaction(db) {
+        ImageMetadata.batchInsert(images) { img ->
+            this[ImageMetadata.title] = img.title
+            this[ImageMetadata.description] = img.description
+            this[ImageMetadata.category] = img.category
+            this[ImageMetadata.keywords] = img.keywords
+            this[ImageMetadata.filePath] = img.file.absolutePath
+            this[ImageMetadata.cacheKey] = img.cacheKey
+            this[ImageMetadata.generateId] = resultId
         }
     }
 
@@ -75,7 +70,7 @@ object Repository {
             .firstOrNull()?.get(GenerateResult.id) ?: currentId
     }
 
-    suspend fun getResult(id: Int): MetadataResult = withContext(Dispatchers.IO) {
+    suspend fun getResult(id: Int): MetadataResult = coroutineScope {
         val nextId = async { getNextResultId(id, false) }
         val prevId = async { getNextResultId(id, true) }
         val images = async {
@@ -100,9 +95,14 @@ object Repository {
         )
     }
 
-    fun deleteAll() {
-        transaction(db) {
-            GenerateResult.deleteAll()
+    suspend fun delete(id: Int): Int = coroutineScope {
+        suspendTransaction(db) {
+            GenerateResult.deleteWhere { GenerateResult.id eq id }
         }
+        val nextIdAsync = async { getNextResultId(id, false) }
+        val prevIdAsync = async { getNextResultId(id, true) }
+        val nextId = nextIdAsync.await()
+        val prevId = prevIdAsync.await()
+        if (prevId != id) prevId else nextId
     }
 }

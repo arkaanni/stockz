@@ -3,6 +3,7 @@ package dev.arkaan
 import dev.arkaan.domain.ImageWithMetadata
 import dev.arkaan.repository.client.GenAi
 import dev.arkaan.repository.db.Repository
+import dev.arkaan.service.CsvService
 import dev.arkaan.service.GenerateService
 import javafx.application.Application
 import javafx.beans.binding.Bindings
@@ -18,11 +19,7 @@ import javafx.scene.Scene
 import javafx.scene.control.*
 import javafx.scene.image.Image
 import javafx.scene.image.ImageView
-import javafx.scene.layout.GridPane
-import javafx.scene.layout.HBox
-import javafx.scene.layout.Priority
-import javafx.scene.layout.StackPane
-import javafx.scene.layout.VBox
+import javafx.scene.layout.*
 import javafx.scene.text.Font
 import javafx.scene.text.FontWeight
 import javafx.scene.text.Text
@@ -61,7 +58,7 @@ class StockzApp : Application() {
     fun ImagePreview(image: ImageWithMetadata) = ImageView(
         Image(
             image.file.toURI().toString(), 200.0, 200.0,
-            true, true
+            true, true, true
         )
     )
 
@@ -264,44 +261,74 @@ class StockzApp : Application() {
             }
         })
 
+        currentId.addListener { _, _, newId ->
+            coroutineScope.launch {
+                generateService.getResult(newId.toInt()).run {
+                    withContext(Dispatchers.JavaFx) {
+                        imageList.setAll(images)
+                        currentId.set(resultId)
+                        prevId.set(previousId)
+                        nextId.set(this@run.nextId)
+                    }
+                }
+            }
+        }
+
         val historyScene = Scene(
             VBox(
                 historyContents,
-                HBox(
-                    Button("prev").apply {
-                        disableProperty().bind(currentId.isEqualTo(prevId))
-                        onAction = EventHandler {
-                            coroutineScope.launch {
-                                generateService.getResult(prevId.get()).run {
-                                    withContext(Dispatchers.JavaFx) {
-                                        imageList.setAll(images)
-                                        currentId.set(resultId)
-                                        prevId.set(previousId)
-                                        nextId.set(this@run.nextId)
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    Button("next").apply {
-                        disableProperty().bind(currentId.isEqualTo(nextId))
-                        onAction = EventHandler {
-                            coroutineScope.launch {
-                                generateService.getResult(nextId.get()).run {
-                                    withContext(Dispatchers.JavaFx) {
-                                        imageList.setAll(images)
-                                        currentId.set(resultId)
-                                        prevId.set(previousId)
-                                        nextId.set(this@run.nextId)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                ).apply {
+                HBox().apply {
+                    val widthProperty = widthProperty()
                     padding = Insets(16.0)
-                    spacing = 8.0
-                }
+                    children.setAll(
+                        HBox(
+                            Button("prev").apply {
+                                disableProperty().bind(currentId.isEqualTo(prevId))
+                                onAction = EventHandler {
+                                    currentId.set(prevId.get())
+                                }
+                            },
+                            Button("next").apply {
+                                disableProperty().bind(currentId.isEqualTo(nextId))
+                                onAction = EventHandler {
+                                    currentId.set(nextId.get())
+                                }
+                            },
+                            Button("hapus").apply {
+                                onAction = EventHandler {
+                                    coroutineScope.launch {
+                                        generateService.delete(currentId.get()).run newId@{
+                                            withContext(Dispatchers.JavaFx) {
+                                                currentId.set(this@newId)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        ).apply {
+                            spacing = 8.0
+                            this.prefWidthProperty().bind(widthProperty.multiply(0.8))
+                        },
+                        HBox(
+                            Button("csv").apply {
+                                onAction = EventHandler {
+                                    coroutineScope.launch {
+                                        CsvService.generateCsv(imageList).run {
+                                            Alert(Alert.AlertType.NONE).apply {
+                                                contentText = "csv export selesai"
+                                                buttonTypes.setAll(ButtonType.OK)
+                                                showAndWait()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        ).apply {
+                            alignment = Pos.CENTER_RIGHT
+                            this.prefWidthProperty().bind(widthProperty.multiply(0.2))
+                        }
+                    )
+                },
             ).apply {
                 spacing = 4.0
             })
@@ -317,12 +344,7 @@ class StockzApp : Application() {
             onShown = EventHandler {
                 coroutineScope.launch {
                     generateService.getLastResultId()?.run {
-                        generateService.getResult(this).run result@ {
-                            imageList.setAll(images)
-                            currentId.set(resultId)
-                            prevId.set(previousId)
-                            nextId.set(this@result.nextId)
-                        }
+                        currentId.set(this)
                     }
                 }
             }

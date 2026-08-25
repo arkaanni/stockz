@@ -36,6 +36,7 @@ class GenerateService(
 
     suspend fun getResult(
         id: Int = 1,
-    ): MetadataResult =
-        Repository.getResult(id)
+    ): MetadataResult = Repository.getResult(id)
+
+    suspend fun delete(id: Int): Int = Repository.delete(id)
 }

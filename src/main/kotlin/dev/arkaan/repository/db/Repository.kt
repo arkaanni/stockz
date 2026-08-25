@@ -5,10 +5,14 @@ import dev.arkaan.domain.MetadataResult
 import dev.arkaan.repository.model.GenerateResult
 import dev.arkaan.repository.model.ImageMetadata
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
+import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.io.File
 
@@ -34,6 +38,15 @@ object Repository {
         }
     }
 
+    suspend fun getLastResultId(): Int? = withContext(Dispatchers.IO) {
+        transaction(db) {
+            GenerateResult.select(GenerateResult.id)
+                .orderBy(GenerateResult.id to SortOrder.DESC)
+                .limit(1)
+                .firstOrNull()?.get(GenerateResult.id)
+        }
+    }
+
     suspend fun insert(images: List<ImageWithMetadata>, resultId: Int) = withContext(Dispatchers.IO) {
         transaction(db) {
             ImageMetadata.batchInsert(images) { img ->
@@ -48,27 +61,43 @@ object Repository {
         }
     }
 
-    fun getNextResultId(currentId: Int): Int = transaction(db) {
+    suspend fun getNextResultId(currentId: Int, isGreater: Boolean): Int = suspendTransaction(db) {
+        val order = if (isGreater) SortOrder.ASC else SortOrder.DESC
+        val whereClause = if (isGreater) {
+            GenerateResult.id greater currentId
+        } else {
+            GenerateResult.id less currentId
+        }
         GenerateResult.select(GenerateResult.id)
-            .where { GenerateResult.id greater currentId }
+            .where { whereClause }
+            .orderBy(GenerateResult.id to order)
             .limit(1)
-            .singleOrNull()?.get(GenerateResult.id) ?: 1
+            .firstOrNull()?.get(GenerateResult.id) ?: currentId
     }
 
-    fun getResult(nextId: Int): MetadataResult = transaction(db) {
-        val images = ImageMetadata.selectAll()
-            .where { ImageMetadata.generateId eq nextId }
-            .map {
-                ImageWithMetadata(
-                    title = it[ImageMetadata.title],
-                    description = it[ImageMetadata.description],
-                    category = it[ImageMetadata.category],
-                    keywords = it[ImageMetadata.keywords],
-                    cacheKey = it[ImageMetadata.cacheKey],
-                    file = File(it[ImageMetadata.filePath]),
-                )
+    suspend fun getResult(id: Int): MetadataResult = withContext(Dispatchers.IO) {
+        val nextId = async { getNextResultId(id, false) }
+        val prevId = async { getNextResultId(id, true) }
+        val images = async {
+            suspendTransaction(db) {
+                ImageMetadata.selectAll()
+                    .where { ImageMetadata.generateId eq id }
+                    .map {
+                        ImageWithMetadata(
+                            title = it[ImageMetadata.title],
+                            description = it[ImageMetadata.description],
+                            category = it[ImageMetadata.category],
+                            keywords = it[ImageMetadata.keywords],
+                            cacheKey = it[ImageMetadata.cacheKey],
+                            file = File(it[ImageMetadata.filePath]),
+                        )
+                    }
             }
-        MetadataResult(images = images, resultId = nextId)
+        }
+        MetadataResult(
+            images = images.await(), resultId = id,
+            nextId = nextId.await(), previousId = prevId.await()
+        )
     }
 
     fun deleteAll() {

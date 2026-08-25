@@ -1,7 +1,6 @@
 package dev.arkaan
 
 import dev.arkaan.domain.ImageWithMetadata
-import dev.arkaan.domain.ResultNavigation
 import dev.arkaan.repository.client.GenAi
 import dev.arkaan.repository.db.Repository
 import dev.arkaan.service.GenerateService
@@ -14,16 +13,15 @@ import javafx.collections.FXCollections
 import javafx.collections.ListChangeListener
 import javafx.event.EventHandler
 import javafx.geometry.Insets
+import javafx.geometry.Pos
 import javafx.scene.Scene
-import javafx.scene.control.Button
-import javafx.scene.control.ProgressIndicator
-import javafx.scene.control.ScrollPane
-import javafx.scene.control.TextField
+import javafx.scene.control.*
 import javafx.scene.image.Image
 import javafx.scene.image.ImageView
 import javafx.scene.layout.GridPane
 import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
+import javafx.scene.layout.StackPane
 import javafx.scene.layout.VBox
 import javafx.scene.text.Font
 import javafx.scene.text.FontWeight
@@ -32,11 +30,8 @@ import javafx.scene.text.TextFlow
 import javafx.stage.FileChooser
 import javafx.stage.Modality
 import javafx.stage.Stage
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.*
 import kotlinx.coroutines.javafx.JavaFx
-import kotlinx.coroutines.launch
 
 class StockzApp : Application() {
 
@@ -48,7 +43,7 @@ class StockzApp : Application() {
     private val showHistoryScreen = SimpleBooleanProperty(false)
     private var historyStage: Stage? = null
 
-    fun filePicker(fileNameFilter: FileChooser.ExtensionFilter): FileChooser = FileChooser().apply {
+    private fun filePicker(fileNameFilter: FileChooser.ExtensionFilter): FileChooser = FileChooser().apply {
         title = "pilih gambar"
         extensionFilters.add(fileNameFilter)
     }
@@ -57,7 +52,7 @@ class StockzApp : Application() {
         Repository.initialize()
     }
 
-    fun Text.bold(size: Double): Text {
+    private fun Text.bold(size: Double): Text {
         font = Font.font("", FontWeight.BOLD, size)
         return this
     }
@@ -82,14 +77,13 @@ class StockzApp : Application() {
             ).apply {
                 spacing = 8.0
             },
-            VBox().apply {
+            VBox(
+                TextFlow(Text(image.title)),
+                TextFlow(Text(image.description)),
+                TextFlow(Text(image.category)),
+                TextFlow(Text(image.keywords))
+            ).apply {
                 spacing = 8.0
-                children.addAll(
-                    TextFlow(Text(image.title)),
-                    TextFlow(Text(image.description)),
-                    TextFlow(Text(image.category)),
-                    TextFlow(Text(image.keywords))
-                )
             }
         ).apply {
             spacing = 16.0
@@ -101,6 +95,7 @@ class StockzApp : Application() {
     @Suppress("FunctionName")
     fun Header() = GridPane().apply {
         val apiKey = SimpleStringProperty("")
+        padding = Insets(16.0)
         hgap = 16.0
         vgap = 16.0
         addRow(
@@ -181,17 +176,9 @@ class StockzApp : Application() {
     }
 
     @Suppress("FunctionName")
-    fun Contents() = GridPane().apply {
-        padding = Insets(16.0)
-        vgap = 16.0
-        hgap = 16.0
-    }
-
-    @Suppress("FunctionName")
-    fun MainContent(contents: GridPane) = ScrollPane().apply {
-        content = contents
-        isFitToWidth = true
-        isFitToHeight = true
+    fun Contents() = ListView<HBox>().apply {
+        padding = Insets(8.0)
+        HBox.setHgrow(this, Priority.NEVER)
         VBox.setVgrow(this, Priority.ALWAYS)
     }
 
@@ -212,26 +199,28 @@ class StockzApp : Application() {
         val contents = Contents()
 
         fileList.addListener(ListChangeListener { images ->
-            contents.run {
-                children.clear()
-                images.list.forEachIndexed { index, image ->
-                    addRow(
-                        index,
-                        ImagePreview(image),
+            images.list.map { image ->
+                HBox().apply {
+                    val widthProperty = this.widthProperty()
+                    children.setAll(
+                        StackPane(ImagePreview(image)).apply {
+                            alignment = Pos.CENTER_LEFT
+                            this.minWidthProperty().bind(widthProperty.multiply(0.2))
+                        },
                         MetadataTable(image)
                     )
+                    maxWidthProperty().bind(contents.widthProperty().subtract(72))
+                    padding = Insets(16.0)
                 }
+            }.run {
+                contents.items.setAll(this)
             }
         })
 
-        val vBox = VBox().apply {
-            padding = Insets(16.0)
-            spacing = 16.0
-            children.addAll(
-                Header(),
-                MainContent(contents),
-            )
-        }
+        val vBox = VBox(
+            Header(),
+            contents
+        )
         val scene = Scene(vBox)
         primaryStage.apply {
             title = "Stockz"
@@ -242,63 +231,80 @@ class StockzApp : Application() {
         }
     }
 
-    suspend fun fetchResult(
-        currentId: Int,
-        navigation: ResultNavigation,
-        addRow: (Int, ImageWithMetadata) -> Unit
-    ) = generateService.getResult(currentId, navigation).let {
-        it.images.forEachIndexed { index, metadata -> addRow(index, metadata) }
-        it.resultId
-    }
-
     @Suppress("FunctionName")
     fun HistoryScreen(mainStage: Stage) {
         if (historyStage != null) return
 
         val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.JavaFx)
-        val currentId = SimpleIntegerProperty(1)
+        val currentId = SimpleIntegerProperty()
+        val prevId = SimpleIntegerProperty()
+        val nextId = SimpleIntegerProperty()
+        val imageList = FXCollections.observableArrayList<ImageWithMetadata>()
 
         val historyContents = Contents()
-        val updateContents = { index: Int, metadata: ImageWithMetadata ->
-            historyContents.addRow(
-                index,
-                ImagePreview(metadata),
-                MetadataTable(metadata)
-            )
-        }
+
+        imageList.addListener(ListChangeListener {
+            coroutineScope.launch(Dispatchers.JavaFx) {
+                it.list.map { image ->
+                    HBox().apply {
+                        val widthProperty = this.widthProperty()
+                        children.setAll(
+                            StackPane(ImagePreview(image)).apply {
+                                alignment = Pos.CENTER_LEFT
+                                this.minWidthProperty().bind(widthProperty.multiply(0.2))
+                            },
+                            MetadataTable(image)
+                        )
+                        maxWidthProperty().bind(historyContents.widthProperty().subtract(72))
+                        padding = Insets(16.0)
+                    }
+                }.run {
+                    historyContents.items.setAll(this)
+                }
+            }
+        })
 
         val historyScene = Scene(
             VBox(
-                MainContent(historyContents),
+                historyContents,
                 HBox(
                     Button("prev").apply {
+                        disableProperty().bind(currentId.isEqualTo(prevId))
                         onAction = EventHandler {
-                            historyContents.children.clear()
                             coroutineScope.launch {
-                                fetchResult(currentId.get(), ResultNavigation.PREVIOUS, updateContents).run {
-                                    currentId.set(this)
+                                generateService.getResult(prevId.get()).run {
+                                    withContext(Dispatchers.JavaFx) {
+                                        imageList.setAll(images)
+                                        currentId.set(resultId)
+                                        prevId.set(previousId)
+                                        nextId.set(this@run.nextId)
+                                    }
                                 }
                             }
                         }
                     },
                     Button("next").apply {
+                        disableProperty().bind(currentId.isEqualTo(nextId))
                         onAction = EventHandler {
-                            historyContents.children.clear()
                             coroutineScope.launch {
-                                fetchResult(currentId.get(), ResultNavigation.NEXT, updateContents).run {
-                                    currentId.set(this)
+                                generateService.getResult(nextId.get()).run {
+                                    withContext(Dispatchers.JavaFx) {
+                                        imageList.setAll(images)
+                                        currentId.set(resultId)
+                                        prevId.set(previousId)
+                                        nextId.set(this@run.nextId)
+                                    }
                                 }
                             }
                         }
                     }
                 ).apply {
-                    padding = Insets(8.0)
+                    padding = Insets(16.0)
                     spacing = 8.0
                 }
             ).apply {
-                padding = Insets(16.0)
+                spacing = 4.0
             })
-
         historyStage = Stage().apply {
             minWidth = 1280.0
             minHeight = 800.0
@@ -309,10 +315,14 @@ class StockzApp : Application() {
             initOwner(mainStage)
             initModality(Modality.WINDOW_MODAL)
             onShown = EventHandler {
-                historyContents.run {
-                    children.clear()
-                    coroutineScope.launch {
-                        fetchResult(currentId.get(), ResultNavigation.FIRST, updateContents)
+                coroutineScope.launch {
+                    generateService.getLastResultId()?.run {
+                        generateService.getResult(this).run result@ {
+                            imageList.setAll(images)
+                            currentId.set(resultId)
+                            prevId.set(previousId)
+                            nextId.set(this@result.nextId)
+                        }
                     }
                 }
             }

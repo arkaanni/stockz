@@ -2,11 +2,8 @@ package dev.arkaan.service
 
 import dev.arkaan.domain.ImageWithMetadata
 import dev.arkaan.domain.MetadataResult
-import dev.arkaan.domain.ResultNavigation
 import dev.arkaan.repository.AIClient
 import dev.arkaan.repository.db.Repository
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 class GenerateService(
     private val ai: AIClient,
@@ -35,15 +32,10 @@ class GenerateService(
         return newSnapshot
     }
 
+    suspend fun getLastResultId(): Int? = Repository.getLastResultId()
+
     suspend fun getResult(
-        currentId: Int = 1,
-        navigation: ResultNavigation
-    ): MetadataResult = withContext(Dispatchers.IO) {
-        val nextId = when (navigation) {
-            ResultNavigation.FIRST -> 1
-            ResultNavigation.NEXT -> Repository.getNextResultId(currentId)
-            ResultNavigation.PREVIOUS -> 1
-        }
-        Repository.getResult(nextId)
-    }
+        id: Int = 1,
+    ): MetadataResult =
+        Repository.getResult(id)
 }

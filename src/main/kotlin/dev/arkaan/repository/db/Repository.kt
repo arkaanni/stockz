@@ -1,9 +1,11 @@
-package dev.arkaan.repository
+package dev.arkaan.repository.db
 
 import dev.arkaan.domain.ImageWithMetadata
 import dev.arkaan.domain.MetadataResult
 import dev.arkaan.repository.model.GenerateResult
 import dev.arkaan.repository.model.ImageMetadata
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.jdbc.*
@@ -32,7 +34,7 @@ object Repository {
         }
     }
 
-    fun insert(images: List<ImageWithMetadata>, resultId: Int) {
+    suspend fun insert(images: List<ImageWithMetadata>, resultId: Int) = withContext(Dispatchers.IO) {
         transaction(db) {
             ImageMetadata.batchInsert(images) { img ->
                 this[ImageMetadata.title] = img.title

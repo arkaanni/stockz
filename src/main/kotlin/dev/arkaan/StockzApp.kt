@@ -2,7 +2,8 @@ package dev.arkaan
 
 import dev.arkaan.domain.ImageWithMetadata
 import dev.arkaan.domain.ResultNavigation
-import dev.arkaan.repository.Repository
+import dev.arkaan.repository.client.GenAi
+import dev.arkaan.repository.db.Repository
 import dev.arkaan.service.GenerateService
 import javafx.application.Application
 import javafx.beans.binding.Bindings
@@ -22,6 +23,7 @@ import javafx.scene.image.Image
 import javafx.scene.image.ImageView
 import javafx.scene.layout.GridPane
 import javafx.scene.layout.HBox
+import javafx.scene.layout.Priority
 import javafx.scene.layout.VBox
 import javafx.scene.text.Font
 import javafx.scene.text.FontWeight
@@ -38,7 +40,7 @@ import kotlinx.coroutines.launch
 
 class StockzApp : Application() {
 
-    private val generateService = GenerateService()
+    private val generateService = GenerateService(GenAi())
     private val fileList = FXCollections.observableArrayList<ImageWithMetadata>()
     private val isEditingApiKey = SimpleBooleanProperty(false)
     private val coroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.JavaFx) }
@@ -141,7 +143,7 @@ class StockzApp : Application() {
                         .otherwise("ubah")
                 )
                 onAction = EventHandler {
-                    if (isEditingApiKey.get()) {
+                    if (isEditingApiKey.get() && apiKey.get().isNotEmpty()) {
                         generateService.setApiKey(apiKey.get())
                     }
                     isEditingApiKey.set(!isEditingApiKey.get())
@@ -156,7 +158,7 @@ class StockzApp : Application() {
                 )
                 onAction = EventHandler {
                     isProcessing.set(true)
-                    coroutineScope.launch {
+                    coroutineScope.launch(Dispatchers.JavaFx) {
                         generateService.generate(fileList).run {
                             fileList.clear()
                             fileList.addAll(this)
@@ -190,6 +192,7 @@ class StockzApp : Application() {
         content = contents
         isFitToWidth = true
         isFitToHeight = true
+        VBox.setVgrow(this, Priority.ALWAYS)
     }
 
     override fun start(primaryStage: Stage) {
@@ -266,35 +269,35 @@ class StockzApp : Application() {
 
         val historyScene = Scene(
             VBox(
-            MainContent(historyContents),
-            HBox(
-                Button("prev").apply {
-                    onAction = EventHandler {
-                        historyContents.children.clear()
-                        coroutineScope.launch {
-                            fetchResult(currentId.get(), ResultNavigation.PREVIOUS, updateContents).run {
-                                currentId.set(this)
+                MainContent(historyContents),
+                HBox(
+                    Button("prev").apply {
+                        onAction = EventHandler {
+                            historyContents.children.clear()
+                            coroutineScope.launch {
+                                fetchResult(currentId.get(), ResultNavigation.PREVIOUS, updateContents).run {
+                                    currentId.set(this)
+                                }
+                            }
+                        }
+                    },
+                    Button("next").apply {
+                        onAction = EventHandler {
+                            historyContents.children.clear()
+                            coroutineScope.launch {
+                                fetchResult(currentId.get(), ResultNavigation.NEXT, updateContents).run {
+                                    currentId.set(this)
+                                }
                             }
                         }
                     }
-                },
-                Button("next").apply {
-                    onAction = EventHandler {
-                        historyContents.children.clear()
-                        coroutineScope.launch {
-                            fetchResult(currentId.get(), ResultNavigation.NEXT, updateContents).run {
-                                currentId.set(this)
-                            }
-                        }
-                    }
+                ).apply {
+                    padding = Insets(8.0)
+                    spacing = 8.0
                 }
             ).apply {
-                padding = Insets(8.0)
-                spacing = 8.0
-            }
-        ).apply {
-            padding = Insets(16.0)
-        })
+                padding = Insets(16.0)
+            })
 
         historyStage = Stage().apply {
             minWidth = 1280.0

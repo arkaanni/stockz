@@ -11,8 +11,3 @@ data class MetadataResponse(
     val keywords: List<String>,
 )
 
-@JsonSerialize
-data class GenerateResponse(
-    val metadata: List<MetadataResponse>,
-)
-

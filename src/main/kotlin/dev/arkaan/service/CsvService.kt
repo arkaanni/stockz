@@ -17,7 +17,7 @@ object CsvService {
         .associate { it.getName() to it.getCode() }
 
     suspend fun generateCsv(images: List<ImageWithMetadata>) = withContext(Dispatchers.IO) {
-        val metadataCsv = File("${downloadPath.toAbsolutePath()}/metadata-adobestock.csv")
+        val metadataCsv = File("${downloadPath.toAbsolutePath()}/metadata-adobestock_${System.currentTimeMillis()}.csv")
         metadataCsv.bufferedWriter(Charsets.UTF_8).use { writer ->
             val header = "Filename,Title,Keywords,Category,Releases\n"
             writer.write(header)

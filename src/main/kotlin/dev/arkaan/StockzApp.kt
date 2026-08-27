@@ -58,32 +58,58 @@ class StockzApp : Application() {
     fun ImagePreview(image: ImageWithMetadata) = ImageView(
         Image(
             image.file.toURI().toString(), 200.0, 200.0,
-            true, true, true
+            true, false, true
         )
-    )
+    ).apply {
+        fitWidth = 200.0
+        fitHeight = 200.0
+        isPreserveRatio = true
+    }
 
     @Suppress("FunctionName")
     fun MetadataTable(image: ImageWithMetadata) = VBox(
         Text(image.file.name).bold(14.0),
-        HBox(
-            VBox(
-                Text("title").bold(12.0),
-                Text("description").bold(12.0),
-                Text("category").bold(12.0),
-                Text("keywords").bold(12.0)
-            ).apply {
-                spacing = 8.0
-            },
-            VBox(
-                TextFlow(Text(image.title)),
-                TextFlow(Text(image.description)),
-                TextFlow(Text(image.category)),
+        GridPane().apply {
+            hgap = 16.0
+            vgap = 8.0
+            alignment = Pos.TOP_LEFT
+            val widthProperty = widthProperty()
+            addRow(
+                0,
+                TextFlow(
+                    Text("title").bold(12.0).apply {
+                        prefWidth(widthProperty.multiply(0.3).get())
+                    }
+                ),
+                TextFlow(Text(image.title))
+            )
+            addRow(
+                1,
+                    TextFlow(
+                        Text("description").bold(12.0)
+                    ).apply {
+                        minWidthProperty().bind(widthProperty.multiply(0.1))
+                    },
+                    TextFlow(Text(image.description))
+            )
+            addRow(
+                2,
+                TextFlow(
+                    Text("category").bold(12.0)
+                ).apply {
+                    minWidthProperty().bind(widthProperty.multiply(0.1))
+                },
+                TextFlow(Text(image.category))
+            )
+            addRow(
+                3,
+                TextFlow(
+                    Text("keywords").bold(12.0)
+                ).apply {
+                    minWidthProperty().bind(widthProperty.multiply(0.1))
+                },
                 TextFlow(Text(image.keywords))
-            ).apply {
-                spacing = 8.0
-            }
-        ).apply {
-            spacing = 16.0
+            )
         }
     ).apply {
         spacing = 12.0
@@ -180,8 +206,6 @@ class StockzApp : Application() {
     }
 
     override fun start(primaryStage: Stage) {
-//        setUserAgentStylesheet(PrimerDark().userAgentStylesheet)
-
         showHistoryScreen.addListener { _, _, isShow ->
             run {
                 if (isShow) {
@@ -244,6 +268,7 @@ class StockzApp : Application() {
             coroutineScope.launch(Dispatchers.JavaFx) {
                 it.list.map { image ->
                     HBox().apply {
+                        spacing = 8.0
                         val widthProperty = this.widthProperty()
                         children.setAll(
                             StackPane(ImagePreview(image)).apply {

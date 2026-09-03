@@ -1,10 +1,12 @@
 package dev.arkaan
 
 import dev.arkaan.domain.ImageWithMetadata
+import dev.arkaan.domain.MetadataRequest
 import dev.arkaan.repository.client.GenAi
 import dev.arkaan.repository.db.Repository
 import dev.arkaan.service.CsvService
 import dev.arkaan.service.GenerateService
+import dev.arkaan.service.PreviewService
 import javafx.application.Application
 import javafx.beans.binding.Bindings
 import javafx.beans.property.SimpleBooleanProperty
@@ -28,17 +30,22 @@ import javafx.stage.FileChooser
 import javafx.stage.Modality
 import javafx.stage.Stage
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.javafx.JavaFx
+import java.io.ByteArrayInputStream
+import javax.imageio.ImageIO
 
 class StockzApp : Application() {
 
-    private val generateService = GenerateService(GenAi())
-    private val fileList = FXCollections.observableArrayList<ImageWithMetadata>()
+    private val previewService = PreviewService()
+    private val generateService = GenerateService(GenAi(), previewService)
+    private val fileList = FXCollections.observableArrayList<MetadataRequest>()
     private val isEditingApiKey = SimpleBooleanProperty(false)
     private val coroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.JavaFx) }
     private val isProcessing = SimpleBooleanProperty(false)
     private val showHistoryScreen = SimpleBooleanProperty(false)
     private var historyStage: Stage? = null
+    private val contents = Contents()
 
     private fun filePicker(fileNameFilter: FileChooser.ExtensionFilter): FileChooser = FileChooser().apply {
         title = "pilih gambar"
@@ -57,8 +64,7 @@ class StockzApp : Application() {
     @Suppress("FunctionName")
     fun ImagePreview(image: ImageWithMetadata) = ImageView(
         Image(
-            image.file.toURI().toString(), 200.0, 200.0,
-            true, false, true
+            ByteArrayInputStream(image.preview?.blob)
         )
     ).apply {
         fitWidth = 200.0
@@ -68,7 +74,7 @@ class StockzApp : Application() {
 
     @Suppress("FunctionName")
     fun MetadataTable(image: ImageWithMetadata) = VBox(
-        Text(image.file.name).bold(14.0),
+        Text(image.fileName).bold(14.0),
         GridPane().apply {
             hgap = 16.0
             vgap = 8.0
@@ -85,12 +91,12 @@ class StockzApp : Application() {
             )
             addRow(
                 1,
-                    TextFlow(
-                        Text("description").bold(12.0)
-                    ).apply {
-                        minWidthProperty().bind(widthProperty.multiply(0.1))
-                    },
-                    TextFlow(Text(image.description))
+                TextFlow(
+                    Text("description").bold(12.0)
+                ).apply {
+                    minWidthProperty().bind(widthProperty.multiply(0.1))
+                },
+                TextFlow(Text(image.description))
             )
             addRow(
                 2,
@@ -126,23 +132,19 @@ class StockzApp : Application() {
             Button("pilih gambar").apply {
                 disableProperty().bind(isProcessing)
                 onAction = EventHandler {
-                    filePicker(fileNameFilter).showOpenMultipleDialog(null).let {
-                        if (it != null && it.isNotEmpty()) {
-                            fileList.apply {
-                                clear()
-                                it.map { f ->
-                                    ImageWithMetadata(
-                                        title = "",
-                                        description = "",
-                                        category = "",
-                                        keywords = "",
-                                        file = f,
-                                        cacheKey = ""
-                                    )
-                                }.toList().also { images ->
-                                    addAll(images)
+                    filePicker(fileNameFilter).showOpenMultipleDialog(null).also {
+                        contents.items.clear()
+                        fileList.clear()
+                        isProcessing.set(true)
+                        coroutineScope.launch(Dispatchers.IO) {
+                            if (it != null && it.isNotEmpty()) {
+                                previewService.createPreviews(it.map { i -> i.toPath() }).collect { image ->
+                                    updateFileList(image)
+                                    fileList.add(MetadataRequest(image.fileName, image.preview?.id!!))
+                                    yield()
                                 }
                             }
+                            isProcessing.set(false)
                         }
                     }
                 }
@@ -176,11 +178,17 @@ class StockzApp : Application() {
                 )
                 onAction = EventHandler {
                     isProcessing.set(true)
-                    coroutineScope.launch(Dispatchers.JavaFx) {
-                        generateService.generate(fileList).run {
-                            fileList.clear()
-                            fileList.addAll(this)
-                            isProcessing.set(false)
+                    contents.items.clear()
+                    coroutineScope.launch(Dispatchers.IO) {
+                        generateService.generate(fileList).onCompletion {
+                            withContext(Dispatchers.JavaFx) {
+                                isProcessing.set(false)
+                            }
+                        }.collect {
+                            withContext(Dispatchers.JavaFx) {
+                                updateFileList(it)
+                            }
+                            yield()
                         }
                     }
                 }
@@ -217,26 +225,7 @@ class StockzApp : Application() {
             }
         }
 
-        val contents = Contents()
-
-        fileList.addListener(ListChangeListener { images ->
-            images.list.map { image ->
-                HBox().apply {
-                    val widthProperty = this.widthProperty()
-                    children.setAll(
-                        StackPane(ImagePreview(image)).apply {
-                            alignment = Pos.CENTER_LEFT
-                            this.minWidthProperty().bind(widthProperty.multiply(0.2))
-                        },
-                        MetadataTable(image)
-                    )
-                    maxWidthProperty().bind(contents.widthProperty().subtract(72))
-                    padding = Insets(16.0)
-                }
-            }.run {
-                contents.items.setAll(this)
-            }
-        })
+        contents.disableProperty().bind(isProcessing)
 
         val vBox = VBox(
             Header(),
@@ -252,6 +241,24 @@ class StockzApp : Application() {
         }
     }
 
+    suspend fun updateFileList(image: ImageWithMetadata) = withContext(Dispatchers.JavaFx) {
+        HBox().apply {
+            val widthProperty = this.widthProperty()
+            children.setAll(
+                Pane(ImagePreview(image)).apply {
+                    alignment = Pos.CENTER_LEFT
+                    this.minWidthProperty().bind(widthProperty.multiply(0.2))
+                },
+                MetadataTable(image)
+            )
+            maxWidthProperty().bind(contents.widthProperty().subtract(72))
+            padding = Insets(16.0)
+        }
+            .run {
+                contents.items.add(this)
+            }
+    }
+
     @Suppress("FunctionName")
     fun HistoryScreen(mainStage: Stage) {
         if (historyStage != null) return
@@ -262,28 +269,45 @@ class StockzApp : Application() {
         val nextId = SimpleIntegerProperty()
         val imageList = FXCollections.observableArrayList<ImageWithMetadata>()
 
-        val historyContents = Contents()
+        val historyContents = ListView<ImageWithMetadata>().apply {
+            cellFactory = {
+                object : ListCell<ImageWithMetadata>() {
 
-        imageList.addListener(ListChangeListener {
-            coroutineScope.launch(Dispatchers.JavaFx) {
-                it.list.map { image ->
-                    HBox().apply {
-                        spacing = 8.0
-                        val widthProperty = this.widthProperty()
-                        children.setAll(
-                            StackPane(ImagePreview(image)).apply {
-                                alignment = Pos.CENTER_LEFT
-                                this.minWidthProperty().bind(widthProperty.multiply(0.2))
-                            },
-                            MetadataTable(image)
-                        )
-                        maxWidthProperty().bind(historyContents.widthProperty().subtract(72))
-                        padding = Insets(16.0)
+
+                    private val content = HBox().apply {
+
                     }
-                }.run {
-                    historyContents.items.setAll(this)
+
+                    override fun updateItem(item: ImageWithMetadata, empty: Boolean) {
+                        super.updateItem(item, empty)
+
+                        content.children.setAll(
+
+                        )
+                    }
                 }
             }
+        }
+
+        imageList.addListener(ListChangeListener {
+//            it.list.map { image ->
+//                HBox().apply {
+//                    spacing = 8.0
+//                    val widthProperty = this.widthProperty()
+//                    children.setAll(
+//                        Pane(ImagePreview(image)).apply {
+//                            alignment = Pos.CENTER_LEFT
+//                            this.minWidthProperty().bind(widthProperty.multiply(0.2))
+//                        },
+//                        MetadataTable(image)
+//                    )
+//                    minHeight = 240.0
+//                    maxWidthProperty().bind(historyContents.widthProperty().subtract(72))
+//                    padding = Insets(16.0)
+//                }
+//            }.run {
+//                historyContents.items.setAll(this)
+//            }
         })
 
         currentId.addListener { _, _, newId ->
@@ -391,6 +415,7 @@ class StockzApp : Application() {
 
         @JvmStatic
         fun main(args: Array<String>) {
+            ImageIO.setUseCache(false)
             launch(StockzApp::class.java, *args)
         }
     }

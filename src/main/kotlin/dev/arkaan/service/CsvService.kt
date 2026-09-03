@@ -22,7 +22,7 @@ object CsvService {
             val header = "Filename,Title,Keywords,Category,Releases\n"
             writer.write(header)
             images.forEach { image ->
-                writer.write("${image.file.name},\"${image.title}\",\"${image.keywords}\",${categoryMap[image.category]},\n")
+                writer.write("${image.fileName},\"${image.title}\",\"${image.keywords}\",${categoryMap[image.category]},\n")
             }
         }
     }

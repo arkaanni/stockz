@@ -9,9 +9,12 @@ import com.google.genai.types.Schema
 import dev.arkaan.configuration.Category
 import dev.arkaan.configuration.Configuration
 import dev.arkaan.domain.GenerateResponse
-import dev.arkaan.domain.ImageWithMetadata
+import dev.arkaan.domain.ImagePreview
 import dev.arkaan.repository.AIClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
 
 class GenAi : AIClient {
@@ -25,18 +28,18 @@ class GenAi : AIClient {
             }
     }
 
-    override suspend fun generateContent(images: List<ImageWithMetadata>): GenerateResponse =
+    override suspend fun generateContent(size: Int, images: Flow<ImagePreview>): GenerateResponse =
         withContext(Dispatchers.IO) {
-            val prompt = Part.fromText(buildPrompt(images.size))
+            val prompt = Part.fromText(buildPrompt(size))
             val contents = images.map { img ->
                 Part.fromBytes(
-                    img.file.readBytes(),
-                    "image/${img.file.extension}"
+                    img.blob,
+                    "image/${img.extension}"
                 )
-            }.toTypedArray()
+            }.toList()
             val res = client.models?.generateContent(
                 "gemini-3.1-flash-lite",
-                Content.fromParts(*contents, prompt),
+                Content.fromParts(*contents.toTypedArray(), prompt),
                 responseConfig
             )
             objectMapper.readValue(res?.text(), GenerateResponse::class.java)

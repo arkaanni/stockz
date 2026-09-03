@@ -8,6 +8,7 @@ fi
 mvn clean package
 
 # 2. Package the app with JPackage
+echo Building executable...
 jpackage \
   --type app-image \
   --name Stockz \

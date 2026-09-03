@@ -28,17 +28,22 @@ class PreviewService {
         }
         for (image in images) {
             out.reset()
-            if (image.extension == "eps") {
-                Files.copy(convertEpsToPng(image, tempDir), out)
+            val previewId = Repository.checkIfPreviewExist(image.pathString)
+            val preview = if (previewId != null) {
+                Repository.getPreview(previewId)
             } else {
-                val fxImage = Image(
-                    image.toUri().toURL().toString(),
-                    600.0, 600.0,
-                    true, false
-                )
-                ImageIO.write(SwingFXUtils.fromFXImage(fxImage, null), "jpg", out)
+                if (image.extension == "eps") {
+                    Files.copy(convertEpsToPng(image, tempDir), out)
+                } else {
+                    val fxImage = Image(
+                        image.toUri().toURL().toString(),
+                        600.0, 600.0,
+                        true, false
+                    )
+                    ImageIO.write(SwingFXUtils.fromFXImage(fxImage, null), "jpg", out)
+                }
+                Repository.insertPreview(image.pathString, out.toByteArray(), image.extension)
             }
-            val preview = Repository.insertPreview(image.pathString, out.toByteArray(), image.extension)
             emit(
                 ImageWithMetadata(
                     fileName = image.name,
@@ -57,8 +62,9 @@ class PreviewService {
         val tempPath = Paths.get("${tempDir}/${file.nameWithoutExtension}.png")
         Files.deleteIfExists(tempPath)
         val tempFile = Files.createFile(tempPath)
+        val isLinux = System.getProperty("os.name").contains("Linux")
         val gsProcess = ProcessBuilder(
-            "gs",
+            if (isLinux) "gs" else "gswin64c.exe",
             "-dNOPAUSE",
             "-dBATCH",
             "-dEPSCrop",

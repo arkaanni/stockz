@@ -269,48 +269,31 @@ class StockzApp : Application() {
         val nextId = SimpleIntegerProperty()
         val imageList = FXCollections.observableArrayList<ImageWithMetadata>()
 
-        val historyContents = ListView<ImageWithMetadata>().apply {
-            cellFactory = {
-                object : ListCell<ImageWithMetadata>() {
-
-
-                    private val content = HBox().apply {
-
-                    }
-
-                    override fun updateItem(item: ImageWithMetadata, empty: Boolean) {
-                        super.updateItem(item, empty)
-
-                        content.children.setAll(
-
-                        )
-                    }
-                }
-            }
-        }
+        val historyContents = Contents()
 
         imageList.addListener(ListChangeListener {
-//            it.list.map { image ->
-//                HBox().apply {
-//                    spacing = 8.0
-//                    val widthProperty = this.widthProperty()
-//                    children.setAll(
-//                        Pane(ImagePreview(image)).apply {
-//                            alignment = Pos.CENTER_LEFT
-//                            this.minWidthProperty().bind(widthProperty.multiply(0.2))
-//                        },
-//                        MetadataTable(image)
-//                    )
-//                    minHeight = 240.0
-//                    maxWidthProperty().bind(historyContents.widthProperty().subtract(72))
-//                    padding = Insets(16.0)
-//                }
-//            }.run {
-//                historyContents.items.setAll(this)
-//            }
+            it.list.map { image ->
+                HBox().apply {
+                    spacing = 8.0
+                    val widthProperty = this.widthProperty()
+                    children.setAll(
+                        Pane(ImagePreview(image)).apply {
+                            alignment = Pos.CENTER_LEFT
+                            this.minWidthProperty().bind(widthProperty.multiply(0.2))
+                        },
+                        MetadataTable(image)
+                    )
+                    minHeight = 240.0
+                    maxWidthProperty().bind(historyContents.widthProperty().subtract(72))
+                    padding = Insets(16.0)
+                }
+            }.run {
+                historyContents.items.setAll(this)
+            }
         })
 
         currentId.addListener { _, _, newId ->
+            imageList.clear()
             coroutineScope.launch {
                 generateService.getResult(newId.toInt()).run {
                     withContext(Dispatchers.JavaFx) {

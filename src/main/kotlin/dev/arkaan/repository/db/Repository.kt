@@ -84,7 +84,8 @@ object Repository {
                             title = it[ImageMetadata.title],
                             description = it[ImageMetadata.description],
                             category = it[ImageMetadata.category],
-                            keywords = it[ImageMetadata.keywords]
+                            keywords = it[ImageMetadata.keywords],
+                            preview = getPreview(it[ImageMetadata.previewId])
                         )
                     }
             }
@@ -122,12 +123,13 @@ object Repository {
             }
     }
 
-    private fun checkIfPreviewExist(filePath: String) =
+    fun checkIfPreviewExist(filePath: String) = transaction(db) {
         Preview
             .select(Preview.id)
             .where {
                 Preview.path eq filePath
             }.firstOrNull()?.get(Preview.id)
+    }
 
     fun insertPreview(filePath: String, blob: ByteArray, extension: String): ImagePreview = transaction(db) {
         with(checkIfPreviewExist(filePath)) {

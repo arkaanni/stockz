@@ -9,30 +9,14 @@ import dev.arkaan.repository.model.Preview
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
-import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.greater
-import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 
-object Repository {
-    private lateinit var db: Database
-
-    fun initialize() {
-        db = Database.connect(
-            url = "jdbc:sqlite:./stockz.db?foreign_keys=on",
-            driver = "org.sqlite.JDBC"
-        )
-
-        transaction(db) {
-//            SchemaUtils.drop(GenerateResult, ImageMetadata)
-            SchemaUtils.create(GenerateResult)
-            SchemaUtils.create(ImageMetadata)
-            SchemaUtils.create(Preview)
-        }
-    }
+class MetadataRepository(
+    private val db: Database
+) {
 
     fun insertResult(): Int = transaction(db) {
         GenerateResult.insert { } get GenerateResult.id
@@ -51,7 +35,8 @@ object Repository {
             this[ImageMetadata.previewId] = img.preview?.id!!
             this[ImageMetadata.title] = img.title
             this[ImageMetadata.description] = img.description
-            this[ImageMetadata.category] = img.category
+            this[ImageMetadata.firstCategory] = img.firstCategory
+            this[ImageMetadata.secondCategory] = img.secondaryCategory
             this[ImageMetadata.keywords] = img.keywords
             this[ImageMetadata.generateId] = resultId
         }
@@ -76,16 +61,26 @@ object Repository {
         val prevId = async { getNextResultId(id, true) }
         val images = async {
             suspendTransaction(db) {
-                ImageMetadata.selectAll()
+                ImageMetadata.innerJoin(
+                    otherTable = Preview,
+                    onColumn = { ImageMetadata.previewId },
+                    otherColumn = { Preview.id },
+                ).selectAll()
                     .where { ImageMetadata.generateId eq id }
                     .map {
                         ImageWithMetadata(
                             fileName = it[ImageMetadata.fileName],
                             title = it[ImageMetadata.title],
                             description = it[ImageMetadata.description],
-                            category = it[ImageMetadata.category],
+                            firstCategory = it[ImageMetadata.firstCategory],
+                            secondaryCategory = it[ImageMetadata.secondCategory],
                             keywords = it[ImageMetadata.keywords],
-                            preview = getPreview(it[ImageMetadata.previewId])
+                            preview = ImagePreview(
+                                it[Preview.id],
+                                it[Preview.path],
+                                it[Preview.blob],
+                                it[Preview.extension]
+                            )
                         )
                     }
             }
@@ -106,43 +101,6 @@ object Repository {
             val nextId = nextIdAsync.await()
             val prevId = prevIdAsync.await()
             if (prevId != id) prevId else nextId
-        }
-    }
-
-    fun getPreview(id: Int) = transaction(db) {
-        Preview.selectAll()
-            .where { Preview.id eq id }
-            .limit(1)
-            .first().let {
-                ImagePreview(
-                    it[Preview.id],
-                    it[Preview.path],
-                    it[Preview.blob],
-                    it[Preview.extension]
-                )
-            }
-    }
-
-    fun checkIfPreviewExist(filePath: String) = transaction(db) {
-        Preview
-            .select(Preview.id)
-            .where {
-                Preview.path eq filePath
-            }.firstOrNull()?.get(Preview.id)
-    }
-
-    fun insertPreview(filePath: String, blob: ByteArray, extension: String): ImagePreview = transaction(db) {
-        with(checkIfPreviewExist(filePath)) {
-            if (this == null) {
-                val id = Preview.insert {
-                    it[Preview.path] = filePath
-                    it[Preview.blob] = blob
-                    it[Preview.extension] = extension
-                } get Preview.id
-                ImagePreview(id, filePath, blob, extension)
-            } else {
-                ImagePreview(this, filePath, blob, extension)
-            }
         }
     }
 }

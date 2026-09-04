@@ -3,6 +3,8 @@ package dev.arkaan.service
 import dev.arkaan.configuration.Configuration
 import dev.arkaan.domain.ImageWithMetadata
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.file.Paths
@@ -10,19 +12,49 @@ import java.nio.file.Paths
 object CsvService {
     private val userDir = System.getProperty("user.home")
     private val downloadPath = Paths.get(userDir, "Downloads")
-    private val categoryMap = Configuration
+    private val categoryMapAdobeStock = Configuration
         .metadataConfiguration
         .getCategories()
         .getAdobeStock()
         .associate { it.getName() to it.getCode() }
 
     suspend fun generateCsv(images: List<ImageWithMetadata>) = withContext(Dispatchers.IO) {
+        val adobeStock = async { generateCsvAdobeStock(images) }
+        val shutterStock = async { generateCsvShutterStock(images) }
+        val vecteezy = async { generateCsvVecteezy(images) }
+        awaitAll(adobeStock, shutterStock, vecteezy)
+    }
+
+    private fun generateCsvAdobeStock(images: List<ImageWithMetadata>) {
         val metadataCsv = File("${downloadPath.toAbsolutePath()}/metadata-adobestock_${System.currentTimeMillis()}.csv")
         metadataCsv.bufferedWriter(Charsets.UTF_8).use { writer ->
             val header = "Filename,Title,Keywords,Category,Releases\n"
             writer.write(header)
-            images.forEach { image ->
-                writer.write("${image.fileName},\"${image.title}\",\"${image.keywords}\",${categoryMap[image.category]},\n")
+            images.forEach {
+                writer.write("${it.fileName},\"${it.title}\",\"${it.keywords}\",${categoryMapAdobeStock[it.firstCategory]},\n")
+            }
+        }
+    }
+
+    private fun generateCsvShutterStock(images: List<ImageWithMetadata>) {
+        val metadataCsv =
+            File("${downloadPath.toAbsolutePath()}/metadata-shutterstock_${System.currentTimeMillis()}.csv")
+        metadataCsv.bufferedWriter(Charsets.UTF_8).use { writer ->
+            val header = "Filename,Description,Keywords,Categories,Editorial,Mature Content,Illustration\n"
+            writer.write(header)
+            images.forEach {
+                writer.write("${it.fileName},\"${it.description}\",\"${it.keywords}\",${it.secondaryCategory},no,,yes\n")
+            }
+        }
+    }
+
+    private fun generateCsvVecteezy(images: List<ImageWithMetadata>) {
+        val metadataCsv = File("${downloadPath.toAbsolutePath()}/metadata-vecteezy_${System.currentTimeMillis()}.csv")
+        metadataCsv.bufferedWriter(Charsets.UTF_8).use { writer ->
+            val header = "Filename,Title,Description,Keywords,License,Id\n"
+            writer.write(header)
+            images.forEach {
+                writer.write("${it.fileName},\"${it.title}\",\"${it.description}\",\"${it.keywords}\",pro,\n")
             }
         }
     }

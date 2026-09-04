@@ -6,7 +6,7 @@ import com.google.genai.types.Content
 import com.google.genai.types.GenerateContentConfig
 import com.google.genai.types.Part
 import com.google.genai.types.Schema
-import dev.arkaan.configuration.Category
+import dev.arkaan.configuration.AdobeStockCategory
 import dev.arkaan.configuration.Configuration
 import dev.arkaan.domain.GenerateResponse
 import dev.arkaan.domain.ImagePreview
@@ -52,7 +52,13 @@ class GenAi : AIClient {
             .metadataConfiguration
             .getCategories()
             .getAdobeStock()
-            .joinToString(", ", transform = Category::getName)
+            .joinToString(", ", transform = AdobeStockCategory::getName)
+        private val shutterStockCategories = Configuration
+            .metadataConfiguration
+            .getCategories()
+            .getShutterStock()
+            .joinToString(", ")
+
         private val jsonSchema = """
             {
                 "type": "object",
@@ -65,7 +71,8 @@ class GenAi : AIClient {
                                 "imageIndex": { "type": "integer" },
                                 "title": { "type": "string" },
                                 "description": { "type": "string" },
-                                "category": { "type": "string" },
+                                "first_category": { "type": "string" },
+                                "second_category": { "type": "string" },
                                 "keywords": {
                                     "type": "array",
                                     "items": {
@@ -73,7 +80,7 @@ class GenAi : AIClient {
                                     }
                                 }
                             },
-                            "required": ["imageIndex", "title", "description", "category", "keywords"]
+                            "required": ["imageIndex", "title", "description", "first_category", "second_category", "keywords"]
                         }
                     }
                 },
@@ -87,11 +94,11 @@ class GenAi : AIClient {
             .build()
 
         private fun buildPrompt(imageCount: Int) = """
-            You are a microstock metadata expert.
-            Analyze these $imageCount images in exact sequential order (from 0 to ${imageCount - 1}).
-            Generate stock metadata for each image (75-100 letter title, 30-60 words description, category, and 45-49 keywords).
-            Avoid using the words: ($negativeKeywords) for the metadata. Avoid repeating words.
-            The categories are one of these: ($adobeStockCategories)
+            You are a microstock metadata expert. 
+            Analyze these $imageCount images in exact sequential order (from 0 to ${imageCount - 1}). 
+            Generate stock metadata for each image (75-100 letter title, 30-60 words description, first category, second category, and 45-49 unique keywords). 
+            Avoid using the words: ($negativeKeywords) for the metadata. The first category can be one of these (${adobeStockCategories}). 
+            The second category can be one of these (${shutterStockCategories})
             """.trimIndent()
 
     }

@@ -4,15 +4,12 @@ import dev.arkaan.domain.ImageWithMetadata
 import dev.arkaan.domain.MetadataRequest
 import dev.arkaan.domain.MetadataResult
 import dev.arkaan.repository.AIClient
-import dev.arkaan.repository.db.Repository
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onCompletion
-import kotlinx.coroutines.flow.onEach
+import dev.arkaan.repository.db.MetadataRepository
+import kotlinx.coroutines.flow.*
 
 class GenerateService(
     private val ai: AIClient,
+    private val metadataRepository: MetadataRepository,
     private val previewService: PreviewService
 ) {
     fun setApiKey(apiKey: String) {
@@ -28,8 +25,9 @@ class GenerateService(
                     fileName = fileName,
                     title = it.title,
                     description = it.description,
-                    category = it.category,
-                    keywords = it.keywords.joinToString(","),
+                    firstCategory = it.firstCategory,
+                    secondaryCategory = it.secondCategory,
+                    keywords = it.keywords.joinToString(", "),
                     preview = previewService.getPreview(previewId)
                 )
             }
@@ -45,16 +43,16 @@ class GenerateService(
             .asFlow()
             .map { previewService.getPreview(it.previewId) }
 
-    suspend fun getLastResultId(): Int? = Repository.getLastResultId()
+    suspend fun getLastResultId(): Int? = metadataRepository.getLastResultId()
 
     private suspend fun insertResult(results: List<ImageWithMetadata>) {
-        val resultId = Repository.insertResult()
-        Repository.insert(results, resultId)
+        val resultId = metadataRepository.insertResult()
+        metadataRepository.insert(results, resultId)
     }
 
     suspend fun getResult(
         id: Int = 1,
-    ): MetadataResult = Repository.getResult(id)
+    ): MetadataResult = metadataRepository.getResult(id)
 
-    suspend fun delete(id: Int): Int = Repository.delete(id)
+    suspend fun delete(id: Int): Int = metadataRepository.delete(id)
 }

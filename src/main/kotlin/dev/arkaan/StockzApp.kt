@@ -2,8 +2,6 @@ package dev.arkaan
 
 import dev.arkaan.domain.ImageWithMetadata
 import dev.arkaan.domain.MetadataRequest
-import dev.arkaan.repository.client.GenAi
-import dev.arkaan.repository.db.Repository
 import dev.arkaan.service.CsvService
 import dev.arkaan.service.GenerateService
 import dev.arkaan.service.PreviewService
@@ -36,9 +34,6 @@ import java.io.ByteArrayInputStream
 import javax.imageio.ImageIO
 
 class StockzApp : Application() {
-
-    private val previewService = PreviewService()
-    private val generateService = GenerateService(GenAi(), previewService)
     private val fileList = FXCollections.observableArrayList<MetadataRequest>()
     private val isEditingApiKey = SimpleBooleanProperty(false)
     private val coroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.JavaFx) }
@@ -50,10 +45,6 @@ class StockzApp : Application() {
     private fun filePicker(fileNameFilter: FileChooser.ExtensionFilter): FileChooser = FileChooser().apply {
         title = "pilih gambar"
         extensionFilters.add(fileNameFilter)
-    }
-
-    override fun init() {
-        Repository.initialize()
     }
 
     private fun Text.bold(size: Double): Text {
@@ -105,7 +96,7 @@ class StockzApp : Application() {
                 ).apply {
                     minWidthProperty().bind(widthProperty.multiply(0.1))
                 },
-                TextFlow(Text(image.category))
+                TextFlow(Text("${image.firstCategory}, ${image.secondaryCategory}"))
             )
             addRow(
                 3,
@@ -391,15 +382,18 @@ class StockzApp : Application() {
     }
 
     companion object {
+        private lateinit var previewService: PreviewService
+        private lateinit var generateService: GenerateService
         private val fileNameFilter = FileChooser.ExtensionFilter(
             "Image files (*.jpg, *.jpeg, *.png, *.eps)",
             "*.jpg", "*.jpeg", "*.png", "*.eps"
         )
 
-        @JvmStatic
-        fun main(args: Array<String>) {
+        fun startApp(previewService: PreviewService, generateService: GenerateService) {
+            this.previewService = previewService
+            this.generateService = generateService
             ImageIO.setUseCache(false)
-            launch(StockzApp::class.java, *args)
+            launch(StockzApp::class.java)
         }
     }
 }

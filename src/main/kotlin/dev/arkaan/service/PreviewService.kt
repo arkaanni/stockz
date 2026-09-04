@@ -1,7 +1,7 @@
 package dev.arkaan.service
 
 import dev.arkaan.domain.ImageWithMetadata
-import dev.arkaan.repository.db.Repository
+import dev.arkaan.repository.db.PreviewRepository
 import javafx.embed.swing.SwingFXUtils
 import javafx.scene.image.Image
 import kotlinx.coroutines.Dispatchers
@@ -15,12 +15,14 @@ import java.nio.file.Paths
 import javax.imageio.ImageIO
 import kotlin.io.path.*
 
-class PreviewService {
+class PreviewService(
+    private val previewRepository: PreviewRepository
+) {
 
-    fun getPreview(id: Int) = Repository.getPreview(id)
+    fun getPreview(id: Int) = previewRepository.getPreview(id)
 
     fun createPreviews(images: List<Path>): Flow<ImageWithMetadata> = flow {
-        val out = ByteArrayOutputStream(64 * 1024)
+        val out = ByteArrayOutputStream(256 * 1024)
         val tempDir = Paths.get("temp").apply {
             if (notExists()) {
                 createDirectory()
@@ -28,28 +30,29 @@ class PreviewService {
         }
         for (image in images) {
             out.reset()
-            val previewId = Repository.checkIfPreviewExist(image.pathString)
+            val previewId = previewRepository.checkIfPreviewExist(image.pathString)
             val preview = if (previewId != null) {
-                Repository.getPreview(previewId)
+                previewRepository.getPreview(previewId)
             } else {
                 if (image.extension == "eps") {
                     Files.copy(convertEpsToPng(image, tempDir), out)
                 } else {
                     val fxImage = Image(
                         image.toUri().toURL().toString(),
-                        600.0, 600.0,
-                        true, false
+                        1024.0, 1024.0,
+                        true, true
                     )
                     ImageIO.write(SwingFXUtils.fromFXImage(fxImage, null), "jpg", out)
                 }
-                Repository.insertPreview(image.pathString, out.toByteArray(), image.extension)
+                previewRepository.insertPreview(image.pathString, out.toByteArray(), image.extension)
             }
             emit(
                 ImageWithMetadata(
                     fileName = image.name,
                     title = "",
                     description = "",
-                    category = "",
+                    firstCategory = "",
+                    secondaryCategory = "",
                     keywords = "",
                     preview = preview
                 )
@@ -72,7 +75,8 @@ class PreviewService {
             "-sDEVICE=png16m",
             "-dFirstPage=1",
             "-dLastPage=1",
-            "-g3840x2160", "-dEPSFitPage",
+            "-g2048x2048",
+            "-dEPSFitPage",
             "-sOutputFile=${tempFile.pathString}",
             file.pathString,
         ).apply {

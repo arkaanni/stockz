@@ -22,14 +22,21 @@ class ImageListCell(
     private val previewImage = ImageView().apply {
         fitWidth = 200.0
         fitHeight = 200.0
+        minWidth = 100.0
+        minHeight = 100.0
         isPreserveRatio = true
     }
     private val previewContainer = Pane().apply {
         alignment = Pos.CENTER_LEFT
+        maxWidth = 200.0
+        minWidth = 200.0
+        maxHeight = 200.0
+        minHeight= 200.0
         children.setAll(previewImage)
     }
     private val container = HBox().apply {
         padding = Insets(16.0)
+        spacing = 16.0
         children.setAll(
             previewContainer,
             VBox(
@@ -44,13 +51,10 @@ class ImageListCell(
     init {
         listViewProperty().addListener { _, _, listView ->
             if (listView != null) {
-                container.maxWidthProperty().bind(this.widthProperty().subtract(48))
+                container.maxWidthProperty().bind(this.widthProperty().subtract(16.0))
             } else {
                 container.maxWidthProperty().unbind()
             }
-        }
-        previewContainer.apply {
-            minWidthProperty().bind(container.widthProperty().multiply(0.2))
         }
     }
 

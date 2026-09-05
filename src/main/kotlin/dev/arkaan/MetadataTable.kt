@@ -59,7 +59,7 @@ class MetadataTable : GridPane() {
         title.text = image.data.title
         description.text = image.data.description
         category.text = "${image.data.firstCategory}, ${image.data.secondaryCategory}"
-        keywords.text = image.data.keywords
+        keywords.text = "${image.data.keywords} (${image.data.keywords.split(", ").count()})"
     }
 
     fun clear() {

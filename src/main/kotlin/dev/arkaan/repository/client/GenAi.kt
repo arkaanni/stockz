@@ -1,11 +1,10 @@
 package dev.arkaan.repository.client
 
-import com.google.genai.Client
-import com.google.genai.JsonSerializable.objectMapper
-import com.google.genai.types.Content
-import com.google.genai.types.GenerateContentConfig
-import com.google.genai.types.Part
-import com.google.genai.types.Schema
+import com.google.genai.kotlin.Client
+import com.google.genai.kotlin.types.Blob
+import com.google.genai.kotlin.types.Content
+import com.google.genai.kotlin.types.GenerateContentConfig
+import com.google.genai.kotlin.types.Part
 import dev.arkaan.configuration.AdobeStockCategory
 import dev.arkaan.configuration.Configuration
 import dev.arkaan.domain.GenerateResponse
@@ -22,32 +21,31 @@ class GenAi : AIClient {
     private lateinit var client: Client
 
     override fun buildClient(apiKey: String) {
-        Client.builder()
-            .apiKey(apiKey)
-            .build().also {
-                client = it
-            }
+        Client(apiKey = apiKey).also {
+            client = it
+        }
     }
 
     override suspend fun generateContent(size: Int, images: Flow<ImagePreview>): GenerateResponse =
         withContext(Dispatchers.IO) {
-            val prompt = Part.fromText(buildPrompt(size))
+            val prompt = Part(text = buildPrompt(size))
             val contents = images.map { img ->
-                Part.fromBytes(
-                    img.blob,
-                    "image/${img.extension}"
+                Part(
+                    inlineData = Blob(
+                        data = img.blob,
+                        mimeType = "image/${img.extension}"
+                    )
                 )
             }.toList()
-            val res = client.models?.generateContent(
+            val res = client.models.generateContent(
                 "gemini-3.1-flash-lite",
-                Content.fromParts(*contents.toTypedArray(), prompt),
+                Content(contents.plus(prompt)),
                 responseConfig
             )
-            res?.text()?.let { Json.decodeFromString<GenerateResponse>(it) } ?: GenerateResponse(listOf())
+            res.text?.let { Json.decodeFromString<GenerateResponse>(it) } ?: GenerateResponse(listOf())
         }
 
     companion object {
-        private val objectMapper by lazy { objectMapper() }
         private val negativeKeywords = Configuration.appConfiguration.getNegativeKeywords()
         private val adobeStockCategories = Configuration
             .appConfiguration
@@ -89,17 +87,18 @@ class GenAi : AIClient {
             }
         """.trimIndent()
 
-        private val responseConfig = GenerateContentConfig.builder()
-            .responseMimeType("application/json")
-            .responseSchema(Schema.fromJson(jsonSchema))
-            .build()
+        private val responseConfig = GenerateContentConfig(
+            temperature = 0.7,
+            responseJsonSchema = Json.parseToJsonElement(jsonSchema)
+        )
 
         private fun buildPrompt(imageCount: Int) = """
             You are a microstock metadata expert. 
             Analyze these $imageCount images in exact sequential order (from 0 to ${imageCount - 1}). 
-            Generate stock metadata for each image (75-100 letter title, 30-60 words description, first category, second category, and 45-49 unique keywords). 
-            Avoid using the words: ($negativeKeywords) for the metadata. The first category can be one of these (${adobeStockCategories}). 
-            The second category can be one of these (${shutterStockCategories})
+            Generate stock metadata for each image (75-100 letter title, 30-60 words description, first category, second category, 
+            and strictly 49 unique keywords). Avoid using the words: ($negativeKeywords) for the metadata. 
+            The first category must be strictly one of these (${adobeStockCategories}). 
+            The second category must be strictly one of these (${shutterStockCategories})
             """.trimIndent()
 
     }

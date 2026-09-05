@@ -109,10 +109,8 @@ class HistoryScreen(
         currentId.set(0)
         val historyScene = historyScene()
         historyStage = Stage().apply {
-            minWidth = 1280.0
-            minHeight = 800.0
-            width = 1280.0
-            height = 800.0
+            minWidth = 1100.0
+            minHeight = 650.0
             title = "metadata"
             scene = historyScene
             initOwner(mainStage)

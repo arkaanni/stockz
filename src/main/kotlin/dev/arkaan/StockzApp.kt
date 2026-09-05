@@ -16,7 +16,6 @@ import javafx.scene.control.Button
 import javafx.scene.control.ListView
 import javafx.scene.control.ProgressIndicator
 import javafx.scene.control.TextField
-import javafx.scene.control.TextFormatter
 import javafx.scene.layout.GridPane
 import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
@@ -166,8 +165,8 @@ class StockzApp : Application() {
         primaryStage.apply {
             title = "Stockz"
             this.scene = scene
-            minWidth = 1280.0
-            minHeight = 800.0
+            minWidth = 1100.0
+            minHeight = 650.0
             show()
         }
     }

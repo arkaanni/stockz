@@ -25,9 +25,10 @@ class PreviewService(
         private val isLinux = System.getProperty("os.name").contains("Linux")
         private val gsCmd = when {
             isWsl -> arrayOf("wsl", "gs")
-            else -> if (isLinux) arrayOf("gswin64c.exe") else arrayOf("gswin64c.exe")
+            else -> if (isLinux) arrayOf("gs") else arrayOf("gswin64c.exe")
         }
     }
+
     fun getPreviewBlob(id: Int) = previewRepository.getPreviewBlob(id) ?: ByteArray(0)
 
     fun getPreview(id: Int) = previewRepository.getPreview(id)
@@ -46,6 +47,7 @@ class PreviewService(
                     val blob = createPreview(image, tempDir, out)
                     previewRepository.insertPreview(image.pathString, blob, image.extension)
                 }
+
                 else -> if (checkExists.second == null) {
                     val blob = createPreview(image, tempDir, out)
                     previewRepository.updatePreview(checkExists.first, blob)

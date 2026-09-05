@@ -7,14 +7,15 @@ import dev.arkaan.service.PreviewService
 import javafx.application.Application
 import javafx.beans.binding.Bindings
 import javafx.beans.property.SimpleBooleanProperty
-import javafx.beans.property.SimpleIntegerProperty
 import javafx.beans.property.SimpleStringProperty
 import javafx.collections.FXCollections
 import javafx.event.EventHandler
 import javafx.geometry.Insets
-import javafx.geometry.Pos
 import javafx.scene.Scene
-import javafx.scene.control.*
+import javafx.scene.control.Button
+import javafx.scene.control.ListView
+import javafx.scene.control.ProgressIndicator
+import javafx.scene.control.TextField
 import javafx.scene.layout.GridPane
 import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
@@ -23,7 +24,6 @@ import javafx.scene.text.Font
 import javafx.scene.text.FontWeight
 import javafx.scene.text.Text
 import javafx.stage.FileChooser
-import javafx.stage.Modality
 import javafx.stage.Stage
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.onCompletion
@@ -145,7 +145,7 @@ class StockzApp : Application() {
         showHistoryScreen.addListener { _, _, isShow ->
             run {
                 if (isShow) {
-                    HistoryScreen(primaryStage)
+                    showHistoryScreen(primaryStage)
                 } else {
                     historyStage?.close()
                     historyStage = null
@@ -172,125 +172,9 @@ class StockzApp : Application() {
         }
     }
 
-    @Suppress("FunctionName")
-    fun HistoryScreen(mainStage: Stage) {
-        if (historyStage != null) return
-
-        val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.JavaFx)
-        val currentId = SimpleIntegerProperty()
-        val prevId = SimpleIntegerProperty()
-        val nextId = SimpleIntegerProperty()
-        val imageList = FXCollections.observableArrayList<StockImageWithMetadata>()
-
-        val history = ListView<StockImageWithMetadata>().apply {
-            cellFactory = {
-                ImageListCell {
-                    previewService.getPreviewBlob(it)
-                }
-            }
-            padding = Insets(8.0)
-            HBox.setHgrow(this, Priority.NEVER)
-            VBox.setVgrow(this, Priority.ALWAYS)
-            items = imageList
-        }
-
-        currentId.addListener { _, _, newId ->
-            imageList.clear()
-            coroutineScope.launch {
-                generateService.getResult(newId.toInt()).run {
-                    withContext(Dispatchers.JavaFx) {
-                        imageList.setAll(images)
-                        currentId.set(resultId)
-                        prevId.set(previousId)
-                        nextId.set(this@run.nextId)
-                    }
-                }
-            }
-        }
-
-        val historyScene = Scene(
-            VBox(
-                history,
-                HBox().apply {
-                    val widthProperty = widthProperty()
-                    padding = Insets(16.0)
-                    children.setAll(
-                        HBox(
-                            Button("prev").apply {
-                                disableProperty().bind(currentId.isEqualTo(prevId))
-                                onAction = EventHandler {
-                                    currentId.set(prevId.get())
-                                }
-                            },
-                            Button("next").apply {
-                                disableProperty().bind(currentId.isEqualTo(nextId))
-                                onAction = EventHandler {
-                                    currentId.set(nextId.get())
-                                }
-                            },
-                            Button("hapus").apply {
-                                onAction = EventHandler {
-                                    coroutineScope.launch {
-                                        generateService.delete(currentId.get()).run newId@{
-                                            withContext(Dispatchers.JavaFx) {
-                                                currentId.set(this@newId)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        ).apply {
-                            spacing = 8.0
-                            this.prefWidthProperty().bind(widthProperty.multiply(0.8))
-                        },
-                        HBox(
-                            Button("csv").apply {
-                                onAction = EventHandler {
-                                    coroutineScope.launch {
-                                        csvService.generateCsv(currentId.get()).run {
-                                            Alert(Alert.AlertType.NONE).apply {
-                                                contentText = "csv export selesai"
-                                                buttonTypes.setAll(ButtonType.OK)
-                                                showAndWait()
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        ).apply {
-                            alignment = Pos.CENTER_RIGHT
-                            this.prefWidthProperty().bind(widthProperty.multiply(0.2))
-                        }
-                    )
-                },
-            ).apply {
-                spacing = 4.0
-            })
-        historyStage = Stage().apply {
-            minWidth = 1280.0
-            minHeight = 800.0
-            width = 1280.0
-            height = 800.0
-            title = "metadata"
-            scene = historyScene
-            initOwner(mainStage)
-            initModality(Modality.WINDOW_MODAL)
-            onShown = EventHandler {
-                coroutineScope.launch {
-                    generateService.getLastResultId()?.run {
-                        currentId.set(this)
-                    }
-                }
-            }
-            onHidden = EventHandler {
-                showHistoryScreen.set(false)
-                history.items = null
-                history.cellFactory = null
-                historyStage?.close()
-                historyStage = null
-                scene = null
-            }
-            show()
+    fun showHistoryScreen(mainStage: Stage) {
+        historyScreen.start(mainStage) {
+            showHistoryScreen.set(false)
         }
     }
 
@@ -298,6 +182,7 @@ class StockzApp : Application() {
         private lateinit var previewService: PreviewService
         private lateinit var generateService: GenerateService
         private lateinit var csvService: CsvService
+        private lateinit var historyScreen: HistoryScreen
         private val fileNameFilter = FileChooser.ExtensionFilter(
             "Image files (*.jpg, *.jpeg, *.png, *.eps)",
             "*.jpg", "*.jpeg", "*.png", "*.eps"
@@ -316,6 +201,7 @@ class StockzApp : Application() {
             this.previewService = previewService
             this.generateService = generateService
             this.csvService = csvService
+            this.historyScreen = HistoryScreen(previewService, generateService, csvService)
             ImageIO.setUseCache(false)
             launch(StockzApp::class.java)
         }

@@ -59,6 +59,7 @@ class ImageListCell(
         if (empty || item == null) {
             previewImage.image = null
             metadataTable.clear()
+            fileName.text = null
             graphic = null
             return
         }

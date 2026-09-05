@@ -4,6 +4,7 @@ import dev.arkaan.repository.client.GenAi
 import dev.arkaan.repository.db.DB
 import dev.arkaan.repository.db.MetadataRepository
 import dev.arkaan.repository.db.PreviewRepository
+import dev.arkaan.service.CsvService
 import dev.arkaan.service.GenerateService
 import dev.arkaan.service.PreviewService
 
@@ -17,7 +18,8 @@ class Launcher {
             val metadataRepository = MetadataRepository(db)
             val previewService = PreviewService(previewRepository)
             val generateService = GenerateService(GenAi(), metadataRepository, previewService)
-            StockzApp.startApp(previewService, generateService)
+            val csvService = CsvService(generateService)
+            StockzApp.startApp(previewService, generateService, csvService)
         }
     }
 }

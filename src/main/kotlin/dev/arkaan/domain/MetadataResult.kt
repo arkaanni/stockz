@@ -1,7 +1,7 @@
 package dev.arkaan.domain
 
 data class MetadataResult(
-    val images: List<ImageWithMetadata>,
+    val images: List<StockImageWithMetadata>,
     val resultId: Int,
     val previousId: Int,
     val nextId: Int,

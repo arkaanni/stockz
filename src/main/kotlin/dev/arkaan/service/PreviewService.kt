@@ -1,6 +1,7 @@
 package dev.arkaan.service
 
-import dev.arkaan.domain.ImageWithMetadata
+import dev.arkaan.domain.StockImage
+import dev.arkaan.domain.StockImageWithMetadata
 import dev.arkaan.repository.db.PreviewRepository
 import javafx.embed.swing.SwingFXUtils
 import javafx.scene.image.Image
@@ -19,9 +20,11 @@ class PreviewService(
     private val previewRepository: PreviewRepository
 ) {
 
+    fun getPreviewBlob(id: Int) = previewRepository.getPreviewBlob(id)
+
     fun getPreview(id: Int) = previewRepository.getPreview(id)
 
-    fun createPreviews(images: List<Path>): Flow<ImageWithMetadata> = flow {
+    fun createPreviews(images: List<Path>): Flow<StockImageWithMetadata> = flow {
         val out = ByteArrayOutputStream(256 * 1024)
         val tempDir = Paths.get("temp").apply {
             if (notExists()) {
@@ -30,31 +33,34 @@ class PreviewService(
         }
         for (image in images) {
             out.reset()
-            val previewId = previewRepository.checkIfPreviewExist(image.pathString)
-            val preview = if (previewId != null) {
-                previewRepository.getPreview(previewId)
-            } else {
-                if (image.extension == "eps") {
-                    Files.copy(convertEpsToPng(image, tempDir), out)
-                } else {
-                    val fxImage = Image(
-                        image.toUri().toURL().toString(),
-                        1024.0, 1024.0,
-                        true, true
-                    )
-                    ImageIO.write(SwingFXUtils.fromFXImage(fxImage, null), "jpg", out)
+            val previewId = when (val previewId = previewRepository.checkIfPreviewExist(image.pathString)) {
+                null -> {
+                    if (image.extension == "eps") {
+                        Files.copy(convertEpsToPng(image, tempDir), out)
+                    } else {
+                        val fxImage = Image(
+                            image.toUri().toURL().toString(),
+                            1024.0, 1024.0,
+                            true, true
+                        )
+                        ImageIO.write(SwingFXUtils.fromFXImage(fxImage, null), "jpg", out)
+                    }
+                    previewRepository.insertPreview(image.pathString, out.toByteArray(), image.extension)
                 }
-                previewRepository.insertPreview(image.pathString, out.toByteArray(), image.extension)
+
+                else -> previewId
             }
             emit(
-                ImageWithMetadata(
-                    fileName = image.name,
-                    title = "",
-                    description = "",
-                    firstCategory = "",
-                    secondaryCategory = "",
-                    keywords = "",
-                    preview = preview
+                StockImageWithMetadata(
+                    data = StockImage(
+                        fileName = image.name,
+                        title = "",
+                        description = "",
+                        firstCategory = "",
+                        secondaryCategory = "",
+                        keywords = "",
+                    ),
+                    previewId = previewId
                 )
             )
         }

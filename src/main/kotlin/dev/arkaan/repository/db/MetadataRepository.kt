@@ -1,8 +1,8 @@
 package dev.arkaan.repository.db
 
-import dev.arkaan.domain.ImagePreview
-import dev.arkaan.domain.ImageWithMetadata
 import dev.arkaan.domain.MetadataResult
+import dev.arkaan.domain.StockImage
+import dev.arkaan.domain.StockImageWithMetadata
 import dev.arkaan.repository.model.GenerateResult
 import dev.arkaan.repository.model.ImageMetadata
 import dev.arkaan.repository.model.Preview
@@ -29,15 +29,15 @@ class MetadataRepository(
             .firstOrNull()?.get(GenerateResult.id)
     }
 
-    suspend fun insert(images: List<ImageWithMetadata>, resultId: Int) = suspendTransaction(db) {
+    suspend fun insert(images: List<StockImageWithMetadata>, resultId: Int) = suspendTransaction(db) {
         ImageMetadata.batchInsert(images) { img ->
-            this[ImageMetadata.fileName] = img.fileName
-            this[ImageMetadata.previewId] = img.preview?.id!!
-            this[ImageMetadata.title] = img.title
-            this[ImageMetadata.description] = img.description
-            this[ImageMetadata.firstCategory] = img.firstCategory
-            this[ImageMetadata.secondCategory] = img.secondaryCategory
-            this[ImageMetadata.keywords] = img.keywords
+            this[ImageMetadata.fileName] = img.data.fileName
+            this[ImageMetadata.previewId] = img.previewId
+            this[ImageMetadata.title] = img.data.title
+            this[ImageMetadata.description] = img.data.description
+            this[ImageMetadata.firstCategory] = img.data.firstCategory
+            this[ImageMetadata.secondCategory] = img.data.secondaryCategory
+            this[ImageMetadata.keywords] = img.data.keywords
             this[ImageMetadata.generateId] = resultId
         }
     }
@@ -56,6 +56,21 @@ class MetadataRepository(
             .firstOrNull()?.get(GenerateResult.id) ?: currentId
     }
 
+    suspend fun getResultForExport(id: Int) = suspendTransaction(db) {
+        ImageMetadata.selectAll()
+            .where { ImageMetadata.generateId eq id }
+            .map {
+                StockImage(
+                    fileName = it[ImageMetadata.fileName],
+                    title = it[ImageMetadata.title],
+                    description = it[ImageMetadata.description],
+                    firstCategory = it[ImageMetadata.firstCategory],
+                    secondaryCategory = it[ImageMetadata.secondCategory],
+                    keywords = it[ImageMetadata.keywords]
+                )
+            }
+    }
+
     suspend fun getResult(id: Int): MetadataResult = withContext(Dispatchers.IO) {
         val nextId = async { getNextResultId(id, false) }
         val prevId = async { getNextResultId(id, true) }
@@ -68,19 +83,16 @@ class MetadataRepository(
                 ).selectAll()
                     .where { ImageMetadata.generateId eq id }
                     .map {
-                        ImageWithMetadata(
-                            fileName = it[ImageMetadata.fileName],
-                            title = it[ImageMetadata.title],
-                            description = it[ImageMetadata.description],
-                            firstCategory = it[ImageMetadata.firstCategory],
-                            secondaryCategory = it[ImageMetadata.secondCategory],
-                            keywords = it[ImageMetadata.keywords],
-                            preview = ImagePreview(
-                                it[Preview.id],
-                                it[Preview.path],
-                                it[Preview.blob],
-                                it[Preview.extension]
-                            )
+                        StockImageWithMetadata(
+                            data = StockImage(
+                                fileName = it[ImageMetadata.fileName],
+                                title = it[ImageMetadata.title],
+                                description = it[ImageMetadata.description],
+                                firstCategory = it[ImageMetadata.firstCategory],
+                                secondaryCategory = it[ImageMetadata.secondCategory],
+                                keywords = it[ImageMetadata.keywords]
+                            ),
+                            previewId = it[Preview.id]
                         )
                     }
             }

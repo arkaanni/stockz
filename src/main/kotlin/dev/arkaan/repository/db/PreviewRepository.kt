@@ -12,6 +12,13 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 class PreviewRepository(
     private val db: Database,
 ) {
+    fun getPreviewBlob(id: Int) = transaction(db) {
+        Preview.select(Preview.blob)
+            .where { Preview.id eq id }
+            .limit(1)
+            .first()[Preview.blob]
+    }
+
     fun getPreview(id: Int) = transaction(db) {
         Preview.selectAll()
             .where { Preview.id eq id }
@@ -19,7 +26,6 @@ class PreviewRepository(
             .first().let {
                 ImagePreview(
                     it[Preview.id],
-                    it[Preview.path],
                     it[Preview.blob],
                     it[Preview.extension]
                 )
@@ -34,7 +40,7 @@ class PreviewRepository(
             }.firstOrNull()?.get(Preview.id)
     }
 
-    fun insertPreview(filePath: String, blob: ByteArray, extension: String): ImagePreview = transaction(db) {
+    fun insertPreview(filePath: String, blob: ByteArray, extension: String): Int = transaction(db) {
         with(checkIfPreviewExist(filePath)) {
             if (this == null) {
                 val id = Preview.insert {
@@ -42,9 +48,9 @@ class PreviewRepository(
                     it[Preview.blob] = blob
                     it[Preview.extension] = extension
                 } get Preview.id
-                ImagePreview(id, filePath, blob, extension)
+                id
             } else {
-                ImagePreview(this, filePath, blob, extension)
+                this
             }
         }
     }

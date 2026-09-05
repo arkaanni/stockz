@@ -1,8 +1,8 @@
 package dev.arkaan.domain
 
-import com.fasterxml.jackson.databind.annotation.JsonSerialize
+import kotlinx.serialization.Serializable
 
-@JsonSerialize
+@Serializable
 data class GenerateResponse(
     val metadata: List<MetadataResponse>,
 )

@@ -16,6 +16,7 @@ import javafx.scene.control.Button
 import javafx.scene.control.ListView
 import javafx.scene.control.ProgressIndicator
 import javafx.scene.control.TextField
+import javafx.scene.control.TextFormatter
 import javafx.scene.layout.GridPane
 import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
@@ -101,7 +102,6 @@ class StockzApp : Application() {
                 )
                 onAction = EventHandler {
                     isProcessing.set(true)
-                    fileList.clear()
                     coroutineScope.launch(Dispatchers.IO) {
                         generateService.generate(fileList).onCompletion {
                             withContext(Dispatchers.JavaFx) {
@@ -109,7 +109,7 @@ class StockzApp : Application() {
                             }
                         }.collect {
                             withContext(Dispatchers.JavaFx) {
-                                fileList.add(it)
+                                fileList.set(it.first, it.second)
                             }
                             yield()
                         }

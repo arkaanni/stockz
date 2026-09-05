@@ -16,25 +16,28 @@ class GenerateService(
         ai.buildClient(apiKey)
     }
 
-    suspend fun generate(images: List<StockImageWithMetadata>): Flow<StockImageWithMetadata> {
+    suspend fun generate(images: List<StockImageWithMetadata>): Flow<Pair<Int, StockImageWithMetadata>> {
         val response = ai.generateContent(images.size, buildRequest(images))
         val resultList = ArrayList<StockImageWithMetadata>(images.size)
         return response.metadata.asFlow().map {
             with(images[it.imageIndex]) {
-                StockImageWithMetadata(
-                    data = StockImage(
-                        fileName = data.fileName,
-                        title = it.title,
-                        description = it.description,
-                        firstCategory = it.firstCategory,
-                        secondaryCategory = it.secondCategory,
-                        keywords = it.keywords.joinToString(", ")
-                    ),
-                    previewId = previewId
+                Pair(
+                    it.imageIndex,
+                    StockImageWithMetadata(
+                        data = StockImage(
+                            fileName = data.fileName,
+                            title = it.title,
+                            description = it.description,
+                            firstCategory = it.firstCategory,
+                            secondaryCategory = it.secondCategory,
+                            keywords = it.keywords.joinToString(", ")
+                        ),
+                        previewId = previewId
+                    )
                 )
             }
         }.onEach {
-            resultList.add(it)
+            resultList.add(it.second)
         }.onCompletion {
             insertResult(resultList)
         }

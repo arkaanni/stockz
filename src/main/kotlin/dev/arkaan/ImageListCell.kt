@@ -56,6 +56,7 @@ class ImageListCell(
 
     override fun updateItem(item: StockImageWithMetadata?, empty: Boolean) {
         super.updateItem(item, empty)
+        text = null
         if (empty || item == null) {
             previewImage.image = null
             metadataTable.clear()
@@ -66,7 +67,11 @@ class ImageListCell(
         val preview = retrievePreview(item.previewId)
         fileName.text = item.data.fileName
         previewImage.image = Image(
-            ByteArrayInputStream(preview)
+            ByteArrayInputStream(preview),
+            160.0,
+            160.0,
+            true,
+            true
         )
         metadataTable.updateItem(item)
         graphic = container

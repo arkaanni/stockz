@@ -46,7 +46,7 @@ class HistoryScreen(
         items = imageList
     }
 
-    private val historyScene = Scene(
+    private fun historyScene() = Scene(
         VBox(
             history,
             HBox().apply {
@@ -106,6 +106,8 @@ class HistoryScreen(
         })
 
     fun start(mainStage: Stage, onClose: () -> Unit) {
+        currentId.set(0)
+        val historyScene = historyScene()
         historyStage = Stage().apply {
             minWidth = 1280.0
             minHeight = 800.0
@@ -128,8 +130,6 @@ class HistoryScreen(
                 onClose()
                 imageList.clear()
                 historyStage = null
-                scene = null
-                currentId.set(0)
             }
             show()
         }

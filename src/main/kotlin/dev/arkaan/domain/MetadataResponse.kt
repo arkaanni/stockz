@@ -1,16 +1,16 @@
 package dev.arkaan.domain
 
-import com.fasterxml.jackson.annotation.JsonProperty
-import com.fasterxml.jackson.databind.annotation.JsonSerialize
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
-@JsonSerialize
+@Serializable
 data class MetadataResponse(
     val imageIndex: Int,
     val title: String,
     val description: String,
-    @JsonProperty("first_category")
+    @SerialName("first_category")
     val firstCategory: String,
-    @JsonProperty("second_category")
+    @SerialName("second_category")
     val secondCategory: String,
     val keywords: List<String>,
 )

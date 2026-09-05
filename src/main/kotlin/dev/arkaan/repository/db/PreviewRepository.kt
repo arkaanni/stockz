@@ -3,10 +3,7 @@ package dev.arkaan.repository.db
 import dev.arkaan.domain.ImagePreview
 import dev.arkaan.repository.model.Preview
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.select
-import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 
 class PreviewRepository(
@@ -26,7 +23,7 @@ class PreviewRepository(
             .first().let {
                 ImagePreview(
                     it[Preview.id],
-                    it[Preview.blob],
+                    it[Preview.blob] ?: ByteArray(0),
                     it[Preview.extension]
                 )
             }
@@ -34,24 +31,26 @@ class PreviewRepository(
 
     fun checkIfPreviewExist(filePath: String) = transaction(db) {
         Preview
-            .select(Preview.id)
+            .select(Preview.id, Preview.blob)
             .where {
                 Preview.path eq filePath
-            }.firstOrNull()?.get(Preview.id)
+            }.firstOrNull()?.let {
+                Pair(it[Preview.id], it[Preview.blob])
+            }
     }
 
-    fun insertPreview(filePath: String, blob: ByteArray, extension: String): Int = transaction(db) {
-        with(checkIfPreviewExist(filePath)) {
-            if (this == null) {
-                val id = Preview.insert {
-                    it[Preview.path] = filePath
-                    it[Preview.blob] = blob
-                    it[Preview.extension] = extension
-                } get Preview.id
-                id
-            } else {
-                this
-            }
+    fun insertPreview(filePath: String, blob: ByteArray?, extension: String): Int = transaction(db) {
+        val id = Preview.insert {
+            it[Preview.path] = filePath
+            it[Preview.blob] = blob
+            it[Preview.extension] = extension
+        } get Preview.id
+        id
+    }
+
+    fun updatePreview(id: Int, blob: ByteArray?) = transaction(db) {
+        Preview.update(where = { Preview.id eq id }) {
+            it[Preview.blob] = blob
         }
     }
 }

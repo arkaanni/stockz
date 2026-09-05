@@ -1,7 +1,7 @@
 package dev.arkaan.repository.client
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.google.genai.Client
+import com.google.genai.JsonSerializable.objectMapper
 import com.google.genai.types.Content
 import com.google.genai.types.GenerateContentConfig
 import com.google.genai.types.Part
@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 
 class GenAi : AIClient {
     private lateinit var client: Client
@@ -42,19 +43,19 @@ class GenAi : AIClient {
                 Content.fromParts(*contents.toTypedArray(), prompt),
                 responseConfig
             )
-            objectMapper.readValue(res?.text(), GenerateResponse::class.java)
+            res?.text()?.let { Json.decodeFromString<GenerateResponse>(it) } ?: GenerateResponse(listOf())
         }
 
     companion object {
-        private val objectMapper by lazy { jacksonObjectMapper() }
-        private val negativeKeywords = Configuration.metadataConfiguration.getNegativeKeywords()
+        private val objectMapper by lazy { objectMapper() }
+        private val negativeKeywords = Configuration.appConfiguration.getNegativeKeywords()
         private val adobeStockCategories = Configuration
-            .metadataConfiguration
+            .appConfiguration
             .getCategories()
             .getAdobeStock()
             .joinToString(", ", transform = AdobeStockCategory::getName)
         private val shutterStockCategories = Configuration
-            .metadataConfiguration
+            .appConfiguration
             .getCategories()
             .getShutterStock()
             .joinToString(", ")

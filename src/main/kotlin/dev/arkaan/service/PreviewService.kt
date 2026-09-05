@@ -1,5 +1,6 @@
 package dev.arkaan.service
 
+import dev.arkaan.configuration.Configuration
 import dev.arkaan.domain.StockImage
 import dev.arkaan.domain.StockImageWithMetadata
 import dev.arkaan.repository.db.PreviewRepository
@@ -19,8 +20,15 @@ import kotlin.io.path.*
 class PreviewService(
     private val previewRepository: PreviewRepository
 ) {
-
-    fun getPreviewBlob(id: Int) = previewRepository.getPreviewBlob(id)
+    companion object {
+        private val isWsl = Configuration.appConfiguration.getIsWsl()
+        private val isLinux = System.getProperty("os.name").contains("Linux")
+        private val gsCmd = when {
+            isWsl -> arrayOf("wsl", "gs")
+            else -> if (isLinux) arrayOf("gswin64c.exe") else arrayOf("gswin64c.exe")
+        }
+    }
+    fun getPreviewBlob(id: Int) = previewRepository.getPreviewBlob(id) ?: ByteArray(0)
 
     fun getPreview(id: Int) = previewRepository.getPreview(id)
 
@@ -33,22 +41,18 @@ class PreviewService(
         }
         for (image in images) {
             out.reset()
-            val previewId = when (val previewId = previewRepository.checkIfPreviewExist(image.pathString)) {
+            val previewId = when (val checkExists = previewRepository.checkIfPreviewExist(image.pathString)) {
                 null -> {
-                    if (image.extension == "eps") {
-                        Files.copy(convertEpsToPng(image, tempDir), out)
-                    } else {
-                        val fxImage = Image(
-                            image.toUri().toURL().toString(),
-                            1024.0, 1024.0,
-                            true, true
-                        )
-                        ImageIO.write(SwingFXUtils.fromFXImage(fxImage, null), "jpg", out)
-                    }
-                    previewRepository.insertPreview(image.pathString, out.toByteArray(), image.extension)
+                    val blob = createPreview(image, tempDir, out)
+                    previewRepository.insertPreview(image.pathString, blob, image.extension)
                 }
-
-                else -> previewId
+                else -> if (checkExists.second == null) {
+                    val blob = createPreview(image, tempDir, out)
+                    previewRepository.updatePreview(checkExists.first, blob)
+                    checkExists.first
+                } else {
+                    checkExists.first
+                }
             }
             emit(
                 StockImageWithMetadata(
@@ -67,13 +71,26 @@ class PreviewService(
         tempDir.toFile().deleteRecursively()
     }.flowOn(Dispatchers.IO)
 
+    private fun createPreview(image: Path, tempDir: Path, out: ByteArrayOutputStream): ByteArray? {
+        if (image.extension == "eps") {
+            Files.copy(convertEpsToPng(image, tempDir), out)
+        } else {
+            val fxImage = Image(
+                image.toUri().toURL().toString(),
+                1024.0, 1024.0,
+                true, true
+            )
+            ImageIO.write(SwingFXUtils.fromFXImage(fxImage, null), "jpg", out)
+        }
+        return if (out.size() > 0) out.toByteArray() else null
+    }
+
     private fun convertEpsToPng(file: Path, tempDir: Path): Path {
         val tempPath = Paths.get("${tempDir}/${file.nameWithoutExtension}.png")
         Files.deleteIfExists(tempPath)
         val tempFile = Files.createFile(tempPath)
-        val isLinux = System.getProperty("os.name").contains("Linux")
         val gsProcess = ProcessBuilder(
-            if (isLinux) "gs" else "gswin64c.exe",
+            *gsCmd,
             "-dNOPAUSE",
             "-dBATCH",
             "-dEPSCrop",
@@ -83,8 +100,8 @@ class PreviewService(
             "-dLastPage=1",
             "-g2048x2048",
             "-dEPSFitPage",
-            "-sOutputFile=${tempFile.pathString}",
-            file.pathString,
+            "-sOutputFile=${if (isWsl) tempFile.toWslPath() else tempFile.pathString}",
+            if (isWsl) file.toWslPath() else file.pathString
         ).apply {
             redirectOutput(ProcessBuilder.Redirect.DISCARD)
             redirectError(ProcessBuilder.Redirect.DISCARD)
@@ -95,5 +112,14 @@ class PreviewService(
         } catch (e: Exception) {
             tempFile
         }
+    }
+
+    fun Path.toWslPath(): String {
+        val absolutePath = this.toAbsolutePath().normalize().toString()
+
+        // Matches "C:\" or "c:\" and replaces with "/mnt/c/" thx Gemini xD
+        return absolutePath.replace(Regex("""^([a-zA-Z]):[/\\]""")) { match ->
+            "/mnt/${match.groupValues[1].lowercase()}/"
+        }.replace('\\', '/')
     }
 }

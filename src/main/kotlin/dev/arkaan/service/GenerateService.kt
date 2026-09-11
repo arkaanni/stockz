@@ -12,6 +12,10 @@ class GenerateService(
     private val metadataRepository: MetadataRepository,
     private val previewService: PreviewService
 ) {
+    fun setModel(model: String) {
+        ai.setModel(model)
+    }
+
     fun setApiKey(apiKey: String) {
         ai.buildClient(apiKey)
     }

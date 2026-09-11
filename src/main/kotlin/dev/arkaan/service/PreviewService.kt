@@ -21,11 +21,13 @@ class PreviewService(
     private val previewRepository: PreviewRepository
 ) {
     companion object {
-        private val isWsl = Configuration.appConfiguration.getIsWsl()
+        private val isWsl = Configuration.isWsl()
         private val isLinux = System.getProperty("os.name").contains("Linux")
-        private val gsCmd = when {
-            isWsl -> arrayOf("wsl", "gs")
-            else -> if (isLinux) arrayOf("gs") else arrayOf("gswin64c.exe")
+        private val gsCmd by lazy {
+            when {
+                isWsl -> arrayOf("wsl", "gs")
+                else -> if (isLinux) arrayOf("gs") else arrayOf("gswin64c.exe")
+            }
         }
     }
 

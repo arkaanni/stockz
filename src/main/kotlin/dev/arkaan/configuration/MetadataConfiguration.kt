@@ -1,9 +1,8 @@
 package dev.arkaan.configuration
 
-class AppConfiguration {
+class MetadataConfiguration {
     private var categories: Categories? = null
     private var negativeKeywords: String? = null
-    private var isWsl: Boolean = false
 
     fun setCategories(categories: Categories) {
         this.categories = categories
@@ -13,13 +12,8 @@ class AppConfiguration {
         this.negativeKeywords = negativeKeywords
     }
 
-    fun setIsWsl(isWsl: Boolean) {
-        this.isWsl = isWsl
-    }
-
     fun getCategories(): Categories = categories ?: throw IllegalStateException()
     fun getNegativeKeywords(): String = negativeKeywords ?: ""
-    fun getIsWsl(): Boolean = isWsl
 }
 
 class Categories {

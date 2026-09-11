@@ -19,11 +19,16 @@ import kotlinx.serialization.json.Json
 
 class GenAi : AIClient {
     private lateinit var client: Client
+    private lateinit var model: String
 
     override fun buildClient(apiKey: String) {
         Client(apiKey = apiKey).also {
             client = it
         }
+    }
+
+    override fun setModel(model: String) {
+        this.model = model
     }
 
     override suspend fun generateContent(size: Int, images: Flow<ImagePreview>): GenerateResponse =
@@ -38,7 +43,7 @@ class GenAi : AIClient {
                 )
             }.toList()
             val res = client.models.generateContent(
-                "gemini-3.1-flash-lite",
+                model,
                 Content(contents.plus(prompt)),
                 responseConfig
             )
@@ -46,16 +51,12 @@ class GenAi : AIClient {
         }
 
     companion object {
-        private val negativeKeywords = Configuration.appConfiguration.getNegativeKeywords()
+        private val negativeKeywords = Configuration.negativeKeywords()
         private val adobeStockCategories = Configuration
-            .appConfiguration
-            .getCategories()
-            .getAdobeStock()
+            .adobeStockCategories()
             .joinToString(", ", transform = AdobeStockCategory::getName)
         private val shutterStockCategories = Configuration
-            .appConfiguration
-            .getCategories()
-            .getShutterStock()
+            .shutterStockCategories()
             .joinToString(", ")
 
         private val jsonSchema = """
@@ -88,14 +89,14 @@ class GenAi : AIClient {
         """.trimIndent()
 
         private val responseConfig = GenerateContentConfig(
-            temperature = 0.7,
+            temperature = 0.4,
             responseJsonSchema = Json.parseToJsonElement(jsonSchema)
         )
 
         private fun buildPrompt(imageCount: Int) = """
             You are a microstock metadata expert. 
             Analyze these $imageCount images in exact sequential order (from 0 to ${imageCount - 1}). 
-            Generate stock metadata for each image (75-100 letter title, 30-60 words description, first category, second category, 
+            Generate stock metadata for each image (strictly 75-100 letter title, strictly 30-60 words description, first category, second category, 
             and strictly 49 unique keywords). Avoid using the words: ($negativeKeywords) for the metadata. 
             The first category must be strictly one of these (${adobeStockCategories}). 
             The second category must be strictly one of these (${shutterStockCategories})

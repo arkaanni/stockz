@@ -1,5 +1,6 @@
 package dev.arkaan
 
+import dev.arkaan.configuration.Configuration
 import dev.arkaan.domain.StockImageWithMetadata
 import dev.arkaan.service.CsvService
 import dev.arkaan.service.GenerateService
@@ -7,15 +8,14 @@ import dev.arkaan.service.PreviewService
 import javafx.application.Application
 import javafx.beans.binding.Bindings
 import javafx.beans.property.SimpleBooleanProperty
-import javafx.beans.property.SimpleStringProperty
 import javafx.collections.FXCollections
 import javafx.event.EventHandler
 import javafx.geometry.Insets
 import javafx.scene.Scene
 import javafx.scene.control.Button
+import javafx.scene.control.ChoiceBox
 import javafx.scene.control.ListView
 import javafx.scene.control.ProgressIndicator
-import javafx.scene.control.TextField
 import javafx.scene.layout.GridPane
 import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
@@ -32,7 +32,6 @@ import javax.imageio.ImageIO
 
 class StockzApp : Application() {
     private val fileList = FXCollections.observableArrayList<StockImageWithMetadata>()
-    private val isEditingApiKey = SimpleBooleanProperty(false)
     private val coroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.JavaFx) }
     private val isProcessing = SimpleBooleanProperty(false)
     private val showHistoryScreen = SimpleBooleanProperty(false)
@@ -46,7 +45,7 @@ class StockzApp : Application() {
 
     @Suppress("FunctionName")
     fun Header() = GridPane().apply {
-        val apiKey = SimpleStringProperty("")
+        val models = Configuration.geminiModels()
         padding = Insets(16.0)
         hgap = 16.0
         vgap = 16.0
@@ -72,31 +71,18 @@ class StockzApp : Application() {
                     }
                 }
             },
-            TextField().apply {
-                promptText = "gemini api key"
-                disableProperty().bind(isEditingApiKey.not())
-                editableProperty().bind(isEditingApiKey)
-                textProperty().addListener { _, _, newValue -> apiKey.set(newValue) }
-            },
-            Button().apply {
-                disableProperty().bind(isProcessing)
-                textProperty().bind(
-                    Bindings.`when`(isEditingApiKey)
-                        .then("simpan")
-                        .otherwise("ubah")
-                )
+            ChoiceBox<String>().apply {
+                items.addAll(models)
+                value = models[0]
+                generateService.setModel(models[0])
                 onAction = EventHandler {
-                    if (isEditingApiKey.get() && apiKey.get().isNotEmpty()) {
-                        generateService.setApiKey(apiKey.get())
-                    }
-                    isEditingApiKey.set(!isEditingApiKey.get())
+                    println(this.value)
+                    generateService.setModel(this.value)
                 }
             },
             Button("generate").apply {
                 disableProperty().bind(
-                    apiKey.isEmpty
-                        .or(isEditingApiKey)
-                        .or(Bindings.isEmpty(fileList))
+                    Bindings.isEmpty(fileList)
                         .or(isProcessing)
                 )
                 onAction = EventHandler {
@@ -141,6 +127,11 @@ class StockzApp : Application() {
     }
 
     override fun start(primaryStage: Stage) {
+        val apiKey = Configuration.apiKey() ?: throw IllegalStateException("API key is not set")
+        if (apiKey.isBlank()) {
+            throw IllegalStateException("API key is not set")
+        }
+        generateService.setApiKey(apiKey)
         showHistoryScreen.addListener { _, _, isShow ->
             run {
                 if (isShow) {

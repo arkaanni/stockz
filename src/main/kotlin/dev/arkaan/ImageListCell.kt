@@ -31,7 +31,7 @@ class ImageListCell(
         maxWidth = 200.0
         minWidth = 200.0
         maxHeight = 200.0
-        minHeight= 200.0
+        minHeight = 200.0
         children.setAll(previewImage)
     }
     private val container = HBox().apply {

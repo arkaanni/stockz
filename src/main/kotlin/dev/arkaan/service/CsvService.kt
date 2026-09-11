@@ -17,9 +17,7 @@ class CsvService(
         private val userDir = System.getProperty("user.home")
         private val downloadPath = Paths.get(userDir, "Downloads")
         private val categoryMapAdobeStock = Configuration
-            .appConfiguration
-            .getCategories()
-            .getAdobeStock()
+            .adobeStockCategories()
             .associate { it.getName() to it.getCode() }
     }
 

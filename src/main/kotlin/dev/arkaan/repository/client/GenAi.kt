@@ -1,21 +1,29 @@
 package dev.arkaan.repository.client
 
 import com.google.genai.kotlin.Client
+import com.google.genai.kotlin.ClientException
 import com.google.genai.kotlin.types.Blob
 import com.google.genai.kotlin.types.Content
 import com.google.genai.kotlin.types.GenerateContentConfig
+import com.google.genai.kotlin.types.ListModelsConfig
 import com.google.genai.kotlin.types.Part
 import dev.arkaan.configuration.AdobeStockCategory
 import dev.arkaan.configuration.Configuration
+import dev.arkaan.domain.AIModel
 import dev.arkaan.domain.GenerateResponse
+import dev.arkaan.domain.GenerateResult
 import dev.arkaan.domain.ImagePreview
+import dev.arkaan.domain.MetadataResponse
 import dev.arkaan.repository.AIClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 
 class GenAi : AIClient {
     private lateinit var client: Client
@@ -28,7 +36,7 @@ class GenAi : AIClient {
     }
 
     override fun setModel(model: String) {
-        this.model = model
+        this.model = model.removePrefix("models/")
     }
 
     override suspend fun generateContent(size: Int, images: Flow<ImagePreview>): GenerateResponse =
@@ -42,15 +50,37 @@ class GenAi : AIClient {
                     )
                 )
             }.toList()
-            val res = client.models.generateContent(
-                model,
-                Content(contents.plus(prompt)),
-                responseConfig
-            )
-            res.text?.let { Json.decodeFromString<GenerateResponse>(it) } ?: GenerateResponse(listOf())
+            try {
+                val res = client.models.generateContent(
+                    model,
+                    Content(contents.plus(prompt)),
+                    responseConfig
+                )
+                val response = res.text?.let { Json.decodeFromString<GeminiResponse>(it) } ?: GeminiResponse(listOf())
+                GenerateResponse(metadata = response.metadata.asFlow())
+            } catch (e: ClientException) {
+                LOGGER.error("Unable to generate content", e)
+                val message = when (e.code) {
+                    400 -> "Kesalahan data"
+                    401 -> "Unauthorized"
+                    403 -> "Akses ditolak"
+                    404 -> "Model not found"
+                    429 -> "Tidak ada kuota (rate limited)"
+                    else -> "Server error"
+                }
+                GenerateResponse(success = false, errorMessage = message)
+            }
         }
 
+    override suspend fun getModels(): Flow<AIModel> = client.models.list(ListModelsConfig(
+            queryBase = true
+        ))
+            .filter { it.name != null && it.displayName != null }
+            .filter { it.supportedActions?.contains("generateContent") == true }
+            .map { AIModel(name = it.name!!, displayName = it.displayName!! ) }
+
     companion object {
+        private val LOGGER = LoggerFactory.getLogger(GenAi::class.java)
         private val negativeKeywords = Configuration.negativeKeywords()
         private val adobeStockCategories = Configuration
             .adobeStockCategories()
@@ -104,3 +134,7 @@ class GenAi : AIClient {
 
     }
 }
+
+internal data class GeminiResponse(
+    val metadata: List<MetadataResponse>,
+)

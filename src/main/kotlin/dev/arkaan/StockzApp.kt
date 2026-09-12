@@ -1,6 +1,7 @@
 package dev.arkaan
 
 import dev.arkaan.configuration.Configuration
+import dev.arkaan.domain.AIModel
 import dev.arkaan.domain.StockImageWithMetadata
 import dev.arkaan.service.CsvService
 import dev.arkaan.service.GenerateService
@@ -13,7 +14,7 @@ import javafx.event.EventHandler
 import javafx.geometry.Insets
 import javafx.scene.Scene
 import javafx.scene.control.Button
-import javafx.scene.control.ChoiceBox
+import javafx.scene.control.ComboBox
 import javafx.scene.control.ListView
 import javafx.scene.control.ProgressIndicator
 import javafx.scene.layout.GridPane
@@ -25,6 +26,7 @@ import javafx.scene.text.FontWeight
 import javafx.scene.text.Text
 import javafx.stage.FileChooser
 import javafx.stage.Stage
+import javafx.util.StringConverter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.javafx.JavaFx
@@ -37,6 +39,7 @@ class StockzApp : Application() {
     private val showHistoryScreen = SimpleBooleanProperty(false)
     private var historyStage: Stage? = null
     private val contents = Contents()
+    private val modelList = ComboBox<AIModel>()
 
     private fun filePicker(fileNameFilter: FileChooser.ExtensionFilter): FileChooser = FileChooser().apply {
         title = "pilih gambar"
@@ -71,13 +74,13 @@ class StockzApp : Application() {
                     }
                 }
             },
-            ChoiceBox<String>().apply {
-                items.addAll(models)
-                value = models[0]
-                generateService.setModel(models[0])
+            modelList.apply {
+                converter = object : StringConverter<AIModel>() {
+                    override fun toString(m: AIModel?): String? = m?.displayName
+                    override fun fromString(string: String?): AIModel? = null
+                }
                 onAction = EventHandler {
-                    println(this.value)
-                    generateService.setModel(this.value)
+                    generateService.setModel(this.value.name)
                 }
             },
             Button("generate").apply {
@@ -132,6 +135,26 @@ class StockzApp : Application() {
             throw IllegalStateException("API key is not set")
         }
         generateService.setApiKey(apiKey)
+        coroutineScope.launch {
+            generateService.getModels()
+                .onCompletion {
+                    if (modelList.items.isNotEmpty()) {
+                        with(modelList) {
+                            val model = items[0]
+                            generateService.setModel(model.name)
+                            withContext(Dispatchers.JavaFx) {
+                                value = model
+                            }
+                        }
+                    }
+                }.collect { model ->
+                withContext(Dispatchers.JavaFx) {
+                    modelList.apply {
+                        items.add(model)
+                    }
+                }
+            }
+        }
         showHistoryScreen.addListener { _, _, isShow ->
             run {
                 if (isShow) {

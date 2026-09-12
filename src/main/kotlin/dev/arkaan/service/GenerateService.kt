@@ -1,5 +1,7 @@
 package dev.arkaan.service
 
+import dev.arkaan.domain.AIModel
+import dev.arkaan.domain.GenerateResponse
 import dev.arkaan.domain.MetadataResult
 import dev.arkaan.domain.StockImage
 import dev.arkaan.domain.StockImageWithMetadata
@@ -20,10 +22,12 @@ class GenerateService(
         ai.buildClient(apiKey)
     }
 
-    suspend fun generate(images: List<StockImageWithMetadata>): Flow<Pair<Int, StockImageWithMetadata>> {
+    suspend fun getModels(): Flow<AIModel> = ai.getModels()
+
+    suspend fun generate(images: List<StockImageWithMetadata>): GenerateResponse {
         val response = ai.generateContent(images.size, buildRequest(images))
         val resultList = ArrayList<StockImageWithMetadata>(images.size)
-        return response.metadata.asFlow().map {
+        response.metadata?.map {
             with(images[it.imageIndex]) {
                 Pair(
                     it.imageIndex,
@@ -40,11 +44,12 @@ class GenerateService(
                     )
                 )
             }
-        }.onEach {
+        }?.onEach {
             resultList.add(it.second)
-        }.onCompletion {
+        }?.onCompletion {
             insertResult(resultList)
         }
+        return response
     }
 
     private fun buildRequest(images: List<StockImageWithMetadata>) =

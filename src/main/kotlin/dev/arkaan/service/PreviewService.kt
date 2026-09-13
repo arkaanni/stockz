@@ -47,7 +47,8 @@ class PreviewService(
             val previewId = when (val checkExists = previewRepository.checkIfPreviewExist(image.pathString)) {
                 null -> {
                     val blob = createPreview(image, tempDir, out)
-                    previewRepository.insertPreview(image.pathString, blob, image.extension)
+                    val extension = if (image.extension == "eps") "png" else image.extension
+                    previewRepository.insertPreview(image.pathString, blob, extension)
                 }
 
                 else -> if (checkExists.second == null) {

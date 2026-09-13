@@ -13,10 +13,7 @@ import javafx.collections.FXCollections
 import javafx.event.EventHandler
 import javafx.geometry.Insets
 import javafx.scene.Scene
-import javafx.scene.control.Button
-import javafx.scene.control.ComboBox
-import javafx.scene.control.ListView
-import javafx.scene.control.ProgressIndicator
+import javafx.scene.control.*
 import javafx.scene.layout.GridPane
 import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
@@ -30,6 +27,7 @@ import javafx.util.StringConverter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.javafx.JavaFx
+import org.slf4j.LoggerFactory
 import javax.imageio.ImageIO
 
 class StockzApp : Application() {
@@ -37,9 +35,9 @@ class StockzApp : Application() {
     private val coroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.JavaFx) }
     private val isProcessing = SimpleBooleanProperty(false)
     private val showHistoryScreen = SimpleBooleanProperty(false)
-    private var historyStage: Stage? = null
     private val contents = Contents()
     private val modelList = ComboBox<AIModel>()
+    private val errorAlert = Alert(Alert.AlertType.ERROR)
 
     private fun filePicker(fileNameFilter: FileChooser.ExtensionFilter): FileChooser = FileChooser().apply {
         title = "pilih gambar"
@@ -48,7 +46,6 @@ class StockzApp : Application() {
 
     @Suppress("FunctionName")
     fun Header() = GridPane().apply {
-        val models = Configuration.geminiModels()
         padding = Insets(16.0)
         hgap = 16.0
         vgap = 16.0
@@ -91,15 +88,31 @@ class StockzApp : Application() {
                 onAction = EventHandler {
                     isProcessing.set(true)
                     coroutineScope.launch(Dispatchers.IO) {
-                        generateService.generate(fileList).onCompletion {
-                            withContext(Dispatchers.JavaFx) {
-                                isProcessing.set(false)
+                        val result = generateService.generate(fileList)
+                        when (result.success) {
+                            true -> {
+                                result.metadata?.onCompletion {
+                                    withContext(Dispatchers.JavaFx) {
+                                        isProcessing.set(false)
+                                    }
+                                }?.collect {
+                                    withContext(Dispatchers.JavaFx) {
+                                        fileList.set(it.first, it.second)
+                                    }
+                                    yield()
+                                }
                             }
-                        }.collect {
-                            withContext(Dispatchers.JavaFx) {
-                                fileList.set(it.first, it.second)
+
+                            else -> {
+                                withContext(Dispatchers.JavaFx) {
+                                    errorAlert.apply {
+                                        contentText = result.errorMessage
+                                        buttonTypes.setAll(ButtonType.OK)
+                                        showAndWait()
+                                        isProcessing.set(false)
+                                    }
+                                }
                             }
-                            yield()
                         }
                     }
                 }
@@ -132,6 +145,7 @@ class StockzApp : Application() {
     override fun start(primaryStage: Stage) {
         val apiKey = Configuration.apiKey() ?: throw IllegalStateException("API key is not set")
         if (apiKey.isBlank()) {
+            LOGGER.error("API key is not set")
             throw IllegalStateException("API key is not set")
         }
         generateService.setApiKey(apiKey)
@@ -148,20 +162,17 @@ class StockzApp : Application() {
                         }
                     }
                 }.collect { model ->
-                withContext(Dispatchers.JavaFx) {
-                    modelList.apply {
-                        items.add(model)
+                    withContext(Dispatchers.JavaFx) {
+                        modelList.apply {
+                            items.add(model)
+                        }
                     }
                 }
-            }
         }
         showHistoryScreen.addListener { _, _, isShow ->
             run {
                 if (isShow) {
                     showHistoryScreen(primaryStage)
-                } else {
-                    historyStage?.close()
-                    historyStage = null
                 }
             }
         }
@@ -191,7 +202,13 @@ class StockzApp : Application() {
         }
     }
 
+    override fun stop() {
+        super.stop()
+        coroutineScope.cancel()
+    }
+
     companion object {
+        private val LOGGER = LoggerFactory.getLogger(StockzApp::class.java)
         private lateinit var previewService: PreviewService
         private lateinit var generateService: GenerateService
         private lateinit var csvService: CsvService

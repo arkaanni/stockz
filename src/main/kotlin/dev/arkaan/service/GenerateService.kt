@@ -1,10 +1,6 @@
 package dev.arkaan.service
 
-import dev.arkaan.domain.AIModel
-import dev.arkaan.domain.GenerateResponse
-import dev.arkaan.domain.MetadataResult
-import dev.arkaan.domain.StockImage
-import dev.arkaan.domain.StockImageWithMetadata
+import dev.arkaan.domain.*
 import dev.arkaan.repository.AIClient
 import dev.arkaan.repository.db.MetadataRepository
 import kotlinx.coroutines.flow.*
@@ -24,10 +20,10 @@ class GenerateService(
 
     suspend fun getModels(): Flow<AIModel> = ai.getModels()
 
-    suspend fun generate(images: List<StockImageWithMetadata>): GenerateResponse {
+    suspend fun generate(images: List<StockImageWithMetadata>): GenerateResult {
         val response = ai.generateContent(images.size, buildRequest(images))
         val resultList = ArrayList<StockImageWithMetadata>(images.size)
-        response.metadata?.map {
+        val metadataFlow = response.metadata?.map {
             with(images[it.imageIndex]) {
                 Pair(
                     it.imageIndex,
@@ -49,7 +45,11 @@ class GenerateService(
         }?.onCompletion {
             insertResult(resultList)
         }
-        return response
+        return GenerateResult(
+            success = response.success,
+            errorMessage = response.errorMessage,
+            metadata = metadataFlow
+        )
     }
 
     private fun buildRequest(images: List<StockImageWithMetadata>) =

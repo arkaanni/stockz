@@ -32,7 +32,7 @@ import javax.imageio.ImageIO
 
 class StockzApp : Application() {
     private val fileList = FXCollections.observableArrayList<StockImageWithMetadata>()
-    private val coroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.JavaFx) }
+
     private val isProcessing = SimpleBooleanProperty(false)
     private val showHistoryScreen = SimpleBooleanProperty(false)
     private val contents = Contents()
@@ -79,6 +79,7 @@ class StockzApp : Application() {
                 onAction = EventHandler {
                     generateService.setModel(this.value.name)
                 }
+                disableProperty().bind(isProcessing)
             },
             Button("generate").apply {
                 disableProperty().bind(
@@ -91,15 +92,13 @@ class StockzApp : Application() {
                         val result = generateService.generate(fileList)
                         when (result.success) {
                             true -> {
-                                result.metadata?.onCompletion {
+                                result.metadata?.forEach {
                                     withContext(Dispatchers.JavaFx) {
-                                        isProcessing.set(false)
+                                        fileList[it.first] = it.second
                                     }
-                                }?.collect {
-                                    withContext(Dispatchers.JavaFx) {
-                                        fileList.set(it.first, it.second)
-                                    }
-                                    yield()
+                                }
+                                withContext(Dispatchers.JavaFx) {
+                                    isProcessing.set(false)
                                 }
                             }
 
@@ -209,6 +208,7 @@ class StockzApp : Application() {
 
     companion object {
         private val LOGGER = LoggerFactory.getLogger(StockzApp::class.java)
+        private lateinit var coroutineScope: CoroutineScope
         private lateinit var previewService: PreviewService
         private lateinit var generateService: GenerateService
         private lateinit var csvService: CsvService
@@ -226,12 +226,14 @@ class StockzApp : Application() {
         fun startApp(
             previewService: PreviewService,
             generateService: GenerateService,
-            csvService: CsvService
+            csvService: CsvService,
+            scope: CoroutineScope,
         ) {
+            this.coroutineScope = scope
             this.previewService = previewService
             this.generateService = generateService
             this.csvService = csvService
-            this.historyScreen = HistoryScreen(previewService, generateService, csvService)
+            this.historyScreen = HistoryScreen(previewService, generateService, csvService, scope)
             ImageIO.setUseCache(false)
             launch(StockzApp::class.java)
         }

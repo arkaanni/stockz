@@ -13,7 +13,9 @@ import dev.arkaan.domain.MetadataResponse
 import dev.arkaan.repository.AIClient
 import io.ktor.client.plugins.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -33,18 +35,23 @@ class GenAi : AIClient {
         this.model = model.removePrefix("models/")
     }
 
-    override suspend fun generateContent(size: Int, images: Flow<ImagePreview>): GenerateResponse =
+    override suspend fun generateContent(size: Int, images: List<ImagePreview>): GenerateResponse =
         withContext(Dispatchers.IO) {
             LOGGER.info("Generating metadata for {} images", size)
             val prompt = Part(text = buildPrompt(size))
-            val contents = images.map { img ->
-                Part(
-                    inlineData = Blob(
-                        data = img.blob,
-                        mimeType = "image/${img.extension}"
+            var errorMessage: String?
+            val contents = images
+                .map { img ->
+                    Part(
+                        inlineData = Blob(
+                            data = img.blob,
+                            mimeType = "image/${img.extension}"
+                        )
                     )
-                )
-            }.toList()
+                }.toList()
+            if (contents.size != size) {
+                return@withContext GenerateResponse(success = false, errorMessage = "${contents.size - size} gambar tidak ditemukan")
+            }
             try {
                 val res = client.models.generateContent(
                     model,
@@ -52,10 +59,11 @@ class GenAi : AIClient {
                     responseConfig
                 )
                 val response = res.text?.let { Json.decodeFromString<GeminiResponse>(it) } ?: GeminiResponse(listOf())
-                GenerateResponse(metadata = response.metadata.asFlow())
+                LOGGER.info("Generated metadata {} of {} images", response.metadata.size, contents.size)
+                GenerateResponse(metadata = response.metadata.asSequence())
             } catch (e: Exception) {
                 LOGGER.error("Unable to generate content", e)
-                val message = when (e) {
+                errorMessage = when (e) {
                     is ClientException -> {
                         when (e.code) {
                             400 -> "Kesalahan data"
@@ -77,7 +85,7 @@ class GenAi : AIClient {
                     is HttpRequestTimeoutException -> "Request timed out"
                     else -> "Server error"
                 }
-                GenerateResponse(success = false, errorMessage = message)
+                GenerateResponse(success = false, errorMessage = errorMessage)
             }
         }
 

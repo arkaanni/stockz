@@ -3,7 +3,7 @@ package dev.arkaan.service
 import dev.arkaan.configuration.Configuration
 import dev.arkaan.domain.StockImage
 import dev.arkaan.domain.StockImageWithMetadata
-import dev.arkaan.repository.db.PreviewRepository
+import dev.arkaan.repository.db.PreviewJdbi
 import javafx.embed.swing.SwingFXUtils
 import javafx.scene.image.Image
 import kotlinx.coroutines.Dispatchers
@@ -18,7 +18,7 @@ import javax.imageio.ImageIO
 import kotlin.io.path.*
 
 class PreviewService(
-    private val previewRepository: PreviewRepository
+    private val previewJdbi: PreviewJdbi
 ) {
     companion object {
         private val isWsl = Configuration.isWsl()
@@ -31,9 +31,9 @@ class PreviewService(
         }
     }
 
-    fun getPreviewBlob(id: Int) = previewRepository.getPreviewBlob(id) ?: ByteArray(0)
+    fun getPreviewBlob(id: Int) = previewJdbi.getPreviewBlob(id) ?: ByteArray(0)
 
-    fun getPreview(id: Int) = previewRepository.getPreview(id)
+    fun getPreview(id: Int) = previewJdbi.getPreview(id)
 
     fun createPreviews(images: List<Path>): Flow<StockImageWithMetadata> = flow {
         val out = ByteArrayOutputStream(256 * 1024)
@@ -44,16 +44,16 @@ class PreviewService(
         }
         for (image in images) {
             out.reset()
-            val previewId = when (val checkExists = previewRepository.checkIfPreviewExist(image.pathString)) {
+            val previewId = when (val checkExists = previewJdbi.checkIfPreviewExist(image.pathString)) {
                 null -> {
                     val blob = createPreview(image, tempDir, out)
                     val extension = if (image.extension == "eps") "png" else image.extension
-                    previewRepository.insertPreview(image.pathString, blob, extension)
+                    previewJdbi.insertPreview(image.pathString, blob, extension)
                 }
 
                 else -> if (checkExists.second == null) {
                     val blob = createPreview(image, tempDir, out)
-                    previewRepository.updatePreview(checkExists.first, blob)
+                    previewJdbi.updatePreview(checkExists.first, blob)
                     checkExists.first
                 } else {
                     checkExists.first

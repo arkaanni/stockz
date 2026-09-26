@@ -2,13 +2,17 @@ package dev.arkaan.service
 
 import dev.arkaan.domain.*
 import dev.arkaan.repository.AIClient
-import dev.arkaan.repository.db.MetadataRepository
-import kotlinx.coroutines.flow.*
+import dev.arkaan.repository.db.MetadataJdbi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 
 class GenerateService(
     private val ai: AIClient,
-    private val metadataRepository: MetadataRepository,
-    private val previewService: PreviewService
+    private val metadataJdbi: MetadataJdbi,
+    private val previewService: PreviewService,
+    private val scope: CoroutineScope,
 ) {
     fun setModel(model: String) {
         ai.setModel(model)
@@ -22,7 +26,6 @@ class GenerateService(
 
     suspend fun generate(images: List<StockImageWithMetadata>): GenerateResult {
         val response = ai.generateContent(images.size, buildRequest(images))
-        val resultList = ArrayList<StockImageWithMetadata>(images.size)
         val metadataFlow = response.metadata?.map {
             with(images[it.imageIndex]) {
                 Pair(
@@ -40,11 +43,12 @@ class GenerateService(
                     )
                 )
             }
-        }?.onEach {
-            resultList.add(it.second)
-        }?.onCompletion {
-            insertResult(resultList)
         }
+
+        if (metadataFlow != null) {
+            scope.launch(Dispatchers.IO) { insertResult(metadataFlow.map { it.second }) }
+        }
+
         return GenerateResult(
             success = response.success,
             errorMessage = response.errorMessage,
@@ -54,19 +58,21 @@ class GenerateService(
 
     private fun buildRequest(images: List<StockImageWithMetadata>) =
         images
-            .asFlow()
-            .map { previewService.getPreview(it.previewId) }
+            .map {
+                previewService.getPreview(it.previewId)
+                    ?: throw RuntimeException("Image ${it.data.fileName} not found")
+            }
 
-    suspend fun getLastResultId(): Int? = metadataRepository.getLastResultId()
+    fun getLastResultId(): Int? = metadataJdbi.getLastResultId()
 
-    private suspend fun insertResult(results: List<StockImageWithMetadata>) {
-        val resultId = metadataRepository.insertResult()
-        metadataRepository.insert(results, resultId)
+    private fun insertResult(results: Sequence<StockImageWithMetadata>) {
+        val resultId = metadataJdbi.insertResult()
+        metadataJdbi.insert(results, resultId)
     }
 
-    suspend fun getResult(id: Int = 1): MetadataResult = metadataRepository.getResult(id)
+    suspend fun getResult(id: Int = 1): MetadataResult = metadataJdbi.getResult(id)
 
-    suspend fun getResultForExport(id: Int) = metadataRepository.getResultForExport(id)
+    fun getResultForExport(id: Int) = metadataJdbi.getResultForExport(id)
 
-    suspend fun delete(id: Int): Int = metadataRepository.delete(id)
+    suspend fun delete(id: Int): Int = metadataJdbi.delete(id)
 }

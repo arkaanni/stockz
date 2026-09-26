@@ -75,6 +75,21 @@
             <artifactId>sqlite-jdbc</artifactId>
             <version>3.53.2.1</version>
         </dependency>
+        <dependency>
+            <groupId>org.jdbi</groupId>
+            <artifactId>jdbi3-core</artifactId>
+            <version>3.54.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jdbi</groupId>
+            <artifactId>jdbi3-kotlin</artifactId>
+            <version>3.54.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jdbi</groupId>
+            <artifactId>jdbi3-sqlite</artifactId>
+            <version>3.54.0</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -97,6 +112,7 @@
                     <compilerPlugins>
                         <plugin>kotlinx-serialization</plugin>
                     </compilerPlugins>
+                    <jvmTarget>21</jvmTarget>
                 </configuration>
                 <dependencies>
                     <dependency>
@@ -122,7 +138,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <release>11</release>
+                    <release>21</release>
                 </configuration>
             </plugin>
 

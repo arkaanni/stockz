@@ -8,6 +8,6 @@ import kotlinx.coroutines.flow.Flow
 interface AIClient {
     fun buildClient(apiKey: String)
     fun setModel(model: String)
-    suspend fun generateContent(size: Int, images: Flow<ImagePreview>): GenerateResponse
+    suspend fun generateContent(size: Int, images: List<ImagePreview>): GenerateResponse
     suspend fun getModels(): Flow<AIModel>
 }

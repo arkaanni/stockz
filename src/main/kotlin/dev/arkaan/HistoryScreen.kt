@@ -26,8 +26,8 @@ class HistoryScreen(
     private val previewService: PreviewService,
     private val generateService: GenerateService,
     private val csvService: CsvService,
+    private val coroutineScope: CoroutineScope,
 ) {
-    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.JavaFx)
     private var historyStage: Stage? = null
     private val currentId = SimpleIntegerProperty()
     private val prevId = SimpleIntegerProperty()
@@ -138,8 +138,13 @@ class HistoryScreen(
             imageList.clear()
             coroutineScope.launch {
                 generateService.getResult(newId.toInt()).run {
+                    images.collect { image ->
+                        withContext(Dispatchers.JavaFx) {
+                            imageList.add(image)
+                        }
+                        yield()
+                    }
                     withContext(Dispatchers.JavaFx) {
-                        imageList.setAll(images)
                         currentId.set(resultId)
                         prevId.set(previousId)
                         this@HistoryScreen.nextId.set(nextId)

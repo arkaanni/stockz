@@ -50,7 +50,10 @@ class GenAi : AIClient {
                     )
                 }.toList()
             if (contents.size != size) {
-                return@withContext GenerateResponse(success = false, errorMessage = "${contents.size - size} gambar tidak ditemukan")
+                return@withContext GenerateResponse(
+                    success = false,
+                    errorMessage = "${contents.size - size} gambar tidak ditemukan"
+                )
             }
             try {
                 val res = client.models.generateContent(

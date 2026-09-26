@@ -8,7 +8,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.withContext
 import org.jdbi.v3.core.Jdbi
-import org.jdbi.v3.core.kotlin.useHandleUnchecked
+import org.jdbi.v3.core.kotlin.inTransactionUnchecked
 import org.jdbi.v3.core.kotlin.withHandleUnchecked
 import kotlin.jvm.optionals.getOrDefault
 
@@ -146,7 +146,10 @@ class MetadataJdbi(
     }
 
     suspend fun delete(id: Int): Int = withContext(Dispatchers.IO) {
-        jdbi.useHandleUnchecked {
+        jdbi.inTransactionUnchecked {
+            it.createUpdate("delete from image_metadata where generate_id = :id")
+                .bind("id", id)
+                .execute()
             it.createUpdate("delete from generate_result where id = :id")
                 .bind("id", id)
                 .execute()

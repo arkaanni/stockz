@@ -71,7 +71,11 @@ class HistoryScreen(
                                 coroutineScope.launch {
                                     generateService.delete(currentId.get()).run newId@{
                                         withContext(Dispatchers.JavaFx) {
-                                            currentId.set(this@newId)
+                                            if (this@newId != currentId.get()) {
+                                                currentId.set(this@newId)
+                                            } else {
+                                                imageList.clear()
+                                            }
                                         }
                                     }
                                 }

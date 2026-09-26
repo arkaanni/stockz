@@ -1,6 +1,6 @@
 databaseChangeLog:
   - changeSet:
-      id: 1
+      id: 1.0.0
       author: arkaan
       changes:
         - createTable:
@@ -60,9 +60,6 @@ databaseChangeLog:
                   type: INTEGER
                   constraints:
                     nullable: false
-                    foreignKeyName: fk_generate_id
-                    references: generate_result(id)
-                    onDelete: CASCADE
               - column:
                   name: file_name
                   type: VARCHAR(255)
@@ -98,5 +95,3 @@ databaseChangeLog:
                   type: INTEGER
                   constraints:
                     nullable: false
-                    foreignKeyName: fk_preview_id
-                    references: previews(id)

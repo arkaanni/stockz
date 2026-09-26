@@ -1,0 +1,102 @@
+databaseChangeLog:
+  - changeSet:
+      id: 1
+      author: arkaan
+      changes:
+        - createTable:
+            tableName: generate_result
+            columns:
+              - column:
+                  name: id
+                  type: INTEGER
+                  autoIncrement: true
+                  constraints:
+                    nullable: false
+                    primaryKey: true
+        - createTable:
+            tableName: previews
+            columns:
+              - column:
+                  name: id
+                  type: INTEGER
+                  autoIncrement: true
+                  constraints:
+                    nullable: false
+                    primaryKey: true
+              - column:
+                  name: path
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: blob
+                  type: BLOB
+                  constraints:
+                    nullable: true
+              - column:
+                  name: extension
+                  type: VARCHAR(5)
+                  constraints:
+                    nullable: false
+        - createIndex:
+            indexName: previews_path_index
+            tableName: previews
+            unique: true
+            columns:
+              - column:
+                  name: path
+        - createTable:
+            tableName: image_metadata
+            columns:
+              - column:
+                  name: id
+                  type: INTEGER
+                  autoIncrement: true
+                  constraints:
+                    nullable: false
+                    primaryKey: true
+              - column:
+                  name: generate_id
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_generate_id
+                    references: generate_result(id)
+                    onDelete: CASCADE
+              - column:
+                  name: file_name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: title
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: VARCHAR(1000)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: first_category
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: second_category
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: keywords
+                  type: VARCHAR(1000)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: preview_id
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_preview_id
+                    references: previews(id)

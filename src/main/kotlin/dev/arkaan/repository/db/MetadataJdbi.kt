@@ -4,7 +4,6 @@ import dev.arkaan.domain.MetadataResult
 import dev.arkaan.domain.StockImage
 import dev.arkaan.domain.StockImageWithMetadata
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.withContext
 import org.jdbi.v3.core.Jdbi
@@ -61,21 +60,20 @@ class MetadataJdbi(
         }
     }
 
-    fun getNextResultId(currentId: Int, isGreater: Boolean): Int {
-        val order = if (isGreater) "asc" else "desc"
-        val whereOperator = if (isGreater) ">" else "<"
-        return jdbi.withHandleUnchecked {
-            it.createQuery(
-                """
-                select id from generate_result
-                where id $whereOperator $currentId
-                order by id $order limit 1
-            """.trimIndent()
-            )
-                .mapTo(Int::class.java)
+    fun getNextPrevResultId(currentId: Int): Pair<Int, Int> =
+        jdbi.withHandleUnchecked {
+            it.createQuery("""
+                select (select coalesce(max(id), gr.id) from generate_result grr
+                where grr.id < gr.id) as next,
+                (select coalesce(min(id), gr.id) from generate_result grr
+                where grr.id > gr.id) as prev
+                from generate_result gr
+                where id = :id
+            """.trimIndent())
+                .bind("id", currentId)
+                .map { rs, _ -> Pair(rs.getInt("prev"), rs.getInt("next")) }
                 .findOne()
-                .getOrDefault(currentId)
-        }
+                .getOrDefault(Pair(currentId, currentId))
     }
 
     fun getResultForExport(id: Int) = channelFlow {
@@ -104,8 +102,8 @@ class MetadataJdbi(
     }
 
     suspend fun getResult(id: Int): MetadataResult = withContext(Dispatchers.IO) {
-        val nextId = async { getNextResultId(id, false) }
-        val prevId = async { getNextResultId(id, true) }
+        val (prev, next) = getNextPrevResultId(id)
+        println("prev: $prev, next: $next")
         val images = channelFlow {
             jdbi.open().use {
                 val resultStream = it.createQuery(
@@ -141,11 +139,12 @@ class MetadataJdbi(
         }
         MetadataResult(
             images = images, resultId = id,
-            nextId = nextId.await(), previousId = prevId.await(),
+            nextId = next, previousId = prev,
         )
     }
 
     suspend fun delete(id: Int): Int = withContext(Dispatchers.IO) {
+        val (prevId, nextId) = getNextPrevResultId(id)
         jdbi.inTransactionUnchecked {
             it.createUpdate("delete from image_metadata where generate_id = :id")
                 .bind("id", id)
@@ -154,10 +153,6 @@ class MetadataJdbi(
                 .bind("id", id)
                 .execute()
         }
-        val nextIdAsync = async { getNextResultId(id, false) }
-        val prevIdAsync = async { getNextResultId(id, true) }
-        val nextId = nextIdAsync.await()
-        val prevId = prevIdAsync.await()
         if (prevId != id) prevId else nextId
     }
 }

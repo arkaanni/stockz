@@ -4,7 +4,9 @@ import dev.arkaan.domain.MetadataResult
 import dev.arkaan.domain.StockImage
 import dev.arkaan.domain.StockImageWithMetadata
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.withContext
 import org.jdbi.v3.core.Jdbi
 import org.jdbi.v3.core.kotlin.inTransactionUnchecked
@@ -14,8 +16,9 @@ import kotlin.jvm.optionals.getOrDefault
 class MetadataJdbi(
     private val jdbi: Jdbi
 ) {
-    fun insertResult(): Int = jdbi.withHandleUnchecked {
-        it.createUpdate("insert into generate_result values (null)")
+    fun insertResult(model: String? = ""): Int = jdbi.withHandleUnchecked {
+        it.createUpdate("insert into generate_result (model) values (:model)")
+            .bind("model", model)
             .executeAndReturnGeneratedKeys("id")
             .mapTo(Int::class.java)
             .one()
@@ -103,44 +106,60 @@ class MetadataJdbi(
 
     suspend fun getResult(id: Int): MetadataResult = withContext(Dispatchers.IO) {
         val (prev, next) = getNextPrevResultId(id)
-        println("prev: $prev, next: $next")
-        val images = channelFlow {
-            jdbi.open().use {
-                val resultStream = it.createQuery(
-                    """
-                            select m.*, p.id as preview_id 
-                            from image_metadata m 
-                            inner join previews p on m.preview_id = p.id 
-                            where m.generate_id = :generate_id
-                        """.trimIndent()
-                )
-                    .bind("generate_id", id)
-                    .map { rs, _ ->
-                        StockImageWithMetadata(
-                            data = StockImage(
-                                fileName = rs.getString("file_name"),
-                                title = rs.getString("title"),
-                                description = rs.getString("description"),
-                                firstCategory = rs.getString("first_category"),
-                                secondaryCategory = rs.getString("second_category"),
-                                keywords = rs.getString("keywords")
-                            ),
-                            previewId = rs.getInt("preview_id")
-                        )
-                    }.stream()
+        val model = jdbi.withHandleUnchecked { 
+            it.createQuery("""
+                select model from generate_result
+                where id = :id
+            """.trimIndent())
+            .bind("id", id)
+            .mapTo(String::class.java)
+            .findOne()
+        }
+        if (model.isEmpty) {
+            MetadataResult(
+                images = emptyFlow(), resultId = id,
+                nextId = next, previousId = prev
+            )
+        } else {
+            val images = channelFlow {
+                jdbi.open().use {
+                    val resultStream = it.createQuery(
+                        """
+                                select m.*, p.id as preview_id 
+                                from image_metadata m 
+                                inner join previews p on m.preview_id = p.id 
+                                where m.generate_id = :generate_id
+                            """.trimIndent()
+                    )
+                        .bind("generate_id", id)
+                        .map { rs, _ ->
+                            StockImageWithMetadata(
+                                data = StockImage(
+                                    fileName = rs.getString("file_name"),
+                                    title = rs.getString("title"),
+                                    description = rs.getString("description"),
+                                    firstCategory = rs.getString("first_category"),
+                                    secondaryCategory = rs.getString("second_category"),
+                                    keywords = rs.getString("keywords")
+                                ),
+                                previewId = rs.getInt("preview_id")
+                            )
+                        }.stream()
 
-                resultStream.use { result ->
-                    val resultIter = result.iterator()
-                    while (resultIter.hasNext()) {
-                        send(resultIter.next())
+                    resultStream.use { result ->
+                        val resultIter = result.iterator()
+                        while (resultIter.hasNext()) {
+                            send(resultIter.next())
+                        }
                     }
                 }
             }
+            MetadataResult(
+                images = images, resultId = id,
+                nextId = next, previousId = prev,
+                model = model.get()
+            )
         }
-        MetadataResult(
-            images = images, resultId = id,
-            nextId = next, previousId = prev,
-        )
     }
 
     suspend fun delete(id: Int): Int = withContext(Dispatchers.IO) {

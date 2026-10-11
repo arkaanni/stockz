@@ -35,6 +35,8 @@ class GenAi : AIClient {
         this.model = model.removePrefix("models/")
     }
 
+    override fun getModel(): String = model
+
     override suspend fun generateContent(size: Int, images: List<ImagePreview>): GenerateResponse =
         withContext(Dispatchers.IO) {
             LOGGER.info("Generating metadata for {} images", size)

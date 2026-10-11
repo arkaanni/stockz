@@ -13,6 +13,11 @@ databaseChangeLog:
                   constraints:
                     nullable: false
                     primaryKey: true
+              - column:
+                  name: model
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: true
         - createTable:
             tableName: previews
             columns:

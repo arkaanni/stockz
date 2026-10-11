@@ -5,6 +5,7 @@ import dev.arkaan.service.CsvService
 import dev.arkaan.service.GenerateService
 import dev.arkaan.service.PreviewService
 import javafx.beans.property.SimpleIntegerProperty
+import javafx.beans.property.SimpleStringProperty
 import javafx.collections.FXCollections
 import javafx.event.EventHandler
 import javafx.geometry.Insets
@@ -14,9 +15,13 @@ import javafx.scene.control.Alert
 import javafx.scene.control.Button
 import javafx.scene.control.ButtonType
 import javafx.scene.control.ListView
+import javafx.scene.layout.Background
+import javafx.scene.layout.BackgroundFill
 import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
 import javafx.scene.layout.VBox
+import javafx.scene.paint.Color
+import javafx.scene.text.Text
 import javafx.stage.Modality
 import javafx.stage.Stage
 import kotlinx.coroutines.*
@@ -33,6 +38,7 @@ class HistoryScreen(
     private val prevId = SimpleIntegerProperty()
     private val nextId = SimpleIntegerProperty()
     private val imageList = FXCollections.observableArrayList<StockImageWithMetadata>()
+    private val resultModel = SimpleStringProperty()
 
     private val history = ListView<StockImageWithMetadata>().apply {
         cellFactory = {
@@ -40,6 +46,7 @@ class HistoryScreen(
                 previewService.getPreviewBlob(it)
             }
         }
+        background = Background(BackgroundFill(Color.WHITE, null, null))
         padding = Insets(8.0)
         HBox.setHgrow(this, Priority.NEVER)
         VBox.setVgrow(this, Priority.ALWAYS)
@@ -48,6 +55,14 @@ class HistoryScreen(
 
     private fun historyScene() = Scene(
         VBox(
+            HBox(
+                Text("model: "),
+                Text().apply {
+                    textProperty().bind(resultModel)
+                }
+            ).apply {
+                padding = Insets(8.0)
+            },
             history,
             HBox().apply {
                 val widthProperty = widthProperty()
@@ -110,7 +125,6 @@ class HistoryScreen(
         })
 
     fun start(mainStage: Stage, onClose: () -> Unit) {
-        currentId.set(0)
         val historyScene = historyScene()
         historyStage = Stage().apply {
             minWidth = 1100.0
@@ -132,6 +146,7 @@ class HistoryScreen(
                 onClose()
                 imageList.clear()
                 historyStage = null
+                currentId.set(-1)
             }
             show()
         }
@@ -139,19 +154,23 @@ class HistoryScreen(
 
     init {
         currentId.addListener { _, _, newId ->
-            imageList.clear()
-            coroutineScope.launch {
-                generateService.getResult(newId.toInt()).run {
-                    images.collect { image ->
-                        withContext(Dispatchers.JavaFx) {
-                            imageList.add(image)
+            val idInt = newId.toInt()
+            if (idInt > 0) {
+                imageList.clear()
+                coroutineScope.launch {
+                    generateService.getResult(newId.toInt()).run {
+                        images.collect { image ->
+                            withContext(Dispatchers.JavaFx) {
+                                imageList.add(image)
+                            }
+                            yield()
                         }
-                        yield()
-                    }
-                    withContext(Dispatchers.JavaFx) {
-                        currentId.set(resultId)
-                        prevId.set(previousId)
-                        this@HistoryScreen.nextId.set(nextId)
+                        withContext(Dispatchers.JavaFx) {
+                            currentId.set(resultId)
+                            prevId.set(previousId)
+                            this@HistoryScreen.nextId.set(nextId)
+                            resultModel.set(model)
+                        }
                     }
                 }
             }

@@ -7,4 +7,5 @@ data class MetadataResult(
     val resultId: Int,
     val previousId: Int,
     val nextId: Int,
+    val model: String? = ""
 )

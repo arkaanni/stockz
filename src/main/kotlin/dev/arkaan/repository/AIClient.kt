@@ -11,4 +11,5 @@ interface AIClient {
     fun getModel(): String
     suspend fun generateContent(size: Int, images: List<ImagePreview>): GenerateResponse
     suspend fun getModels(): Flow<AIModel>
+    fun cleanup()
 }

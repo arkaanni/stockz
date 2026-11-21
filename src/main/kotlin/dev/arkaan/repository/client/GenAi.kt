@@ -27,6 +27,9 @@ class GenAi : AIClient {
 
     override fun buildClient(apiKey: String) {
         Client(apiKey = apiKey).also {
+            if (::client.isInitialized) {
+                client.close()
+            }
             client = it
         }
     }
@@ -39,7 +42,7 @@ class GenAi : AIClient {
 
     override suspend fun generateContent(size: Int, images: List<ImagePreview>): GenerateResponse =
         withContext(Dispatchers.IO) {
-            LOGGER.info("Generating metadata for {} images", size)
+            LOGGER.info("Generating metadata for {} images using {}", size, model)
             val prompt = Part(text = buildPrompt(size))
             var errorMessage: String?
             val contents = images
@@ -102,6 +105,10 @@ class GenAi : AIClient {
         .filter { it.name != null && it.displayName != null }
         .filter { it.supportedActions?.contains("generateContent") == true }
         .map { AIModel(name = it.name!!, displayName = it.displayName!!) }
+
+    override fun cleanup() {
+        client.close()
+    }
 
     companion object {
         private val LOGGER = LoggerFactory.getLogger(GenAi::class.java)

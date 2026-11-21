@@ -202,8 +202,12 @@ class StockzApp : Application() {
     }
 
     override fun stop() {
-        super.stop()
-        coroutineScope.cancel()
+        try {
+            coroutineScope.cancel()
+            generateService.cleanUpClient()
+        } finally {
+            super.stop()
+        }
     }
 
     companion object {

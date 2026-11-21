@@ -77,4 +77,8 @@ class GenerateService(
     fun getResultForExport(id: Int) = metadataJdbi.getResultForExport(id)
 
     suspend fun delete(id: Int): Int = metadataJdbi.delete(id)
+
+    fun cleanUpClient() {
+        ai.cleanup()
+    }
 }

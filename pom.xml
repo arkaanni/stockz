@@ -148,6 +148,7 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
+                            <outputDirectory>${project.build.directory}/fat</outputDirectory>
                             <shadedArtifactAttached>true</shadedArtifactAttached>
                             <shadedClassifierName>fat</shadedClassifierName>
                             <transformers>

@@ -15,6 +15,6 @@ jpackage ^
   --main-class dev.arkaan.Launcher ^
   --dest dist
 
-echo "gemini.api.key=" > dist\Stockz\bin\app.properties
+echo gemini.api.key= > dist\Stockz\app.properties
 
 echo Build Complete! Output located in dist\

@@ -1,4 +1,4 @@
-package dev.arkaan
+package dev.arkaan.view
 
 import dev.arkaan.domain.StockImageWithMetadata
 import dev.arkaan.service.CsvService

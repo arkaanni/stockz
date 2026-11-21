@@ -1,4 +1,4 @@
-package dev.arkaan
+package dev.arkaan.view
 
 import dev.arkaan.StockzApp.Companion.bold
 import dev.arkaan.domain.StockImageWithMetadata

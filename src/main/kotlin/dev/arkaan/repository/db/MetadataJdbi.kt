@@ -4,7 +4,6 @@ import dev.arkaan.domain.MetadataResult
 import dev.arkaan.domain.StockImage
 import dev.arkaan.domain.StockImageWithMetadata
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.withContext

@@ -37,8 +37,4 @@ object Configuration {
     fun isWsl() = (appConfiguration.getProperty("gs.wsl") ?: "false") == "true"
 
     fun apiKey(): String? = appConfiguration.getProperty("gemini.api.key")
-
-    fun geminiModels() = (appConfiguration.getProperty("gemini.model") ?: "gemini-3.1-flash-lite")
-        .split(",")
-        .toList()
 }

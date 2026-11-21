@@ -22,11 +22,12 @@ object DB {
 
     fun initialize() {
         dataSource.connection.use { connection ->
-            val database = DatabaseFactory.getInstance()
-                .findCorrectDatabaseImplementation(JdbcConnection(connection))
-            Liquibase("databasechangelog.yaml", ClassLoaderResourceAccessor(), database).run {
-                update(Contexts(), LabelExpression())
-            }
+            DatabaseFactory.getInstance()
+                .findCorrectDatabaseImplementation(JdbcConnection(connection)).use {
+                    Liquibase("databasechangelog.yaml", ClassLoaderResourceAccessor(), it).run {
+                        update(Contexts(), LabelExpression())
+                    }
+                }
         }
         jdbi = Jdbi.create(dataSource)
             .installPlugin(SQLitePlugin())

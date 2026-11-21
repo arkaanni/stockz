@@ -46,7 +46,9 @@ class GenerateService(
         }
 
         if (metadataFlow != null) {
-            scope.launch(Dispatchers.IO) { insertResult(metadataFlow.map { it.second }) }
+            scope.launch(Dispatchers.IO) {
+                insertResult(metadataFlow.map { it.second }, ai.getModel())
+            }
         }
 
         return GenerateResult(
@@ -65,8 +67,8 @@ class GenerateService(
 
     fun getLastResultId(): Int? = metadataJdbi.getLastResultId()
 
-    private fun insertResult(results: Sequence<StockImageWithMetadata>) {
-        val resultId = metadataJdbi.insertResult()
+    private fun insertResult(results: Sequence<StockImageWithMetadata>, model: String) {
+        val resultId = metadataJdbi.insertResult(model)
         metadataJdbi.insert(results, resultId)
     }
 

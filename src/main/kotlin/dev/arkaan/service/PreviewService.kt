@@ -4,12 +4,13 @@ import dev.arkaan.configuration.Configuration
 import dev.arkaan.domain.StockImage
 import dev.arkaan.domain.StockImageWithMetadata
 import dev.arkaan.repository.db.PreviewJdbi
-import javafx.embed.swing.SwingFXUtils
-import javafx.scene.image.Image
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.onCompletion
+import java.awt.RenderingHints
+import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -35,57 +36,71 @@ class PreviewService(
 
     fun getPreview(id: Int) = previewJdbi.getPreview(id)
 
-    fun createPreviews(images: List<Path>): Flow<StockImageWithMetadata> = flow {
+    fun createPreviews(images: List<Path>): Flow<StockImageWithMetadata> {
         val out = ByteArrayOutputStream(256 * 1024)
         val tempDir = Paths.get("temp").apply {
             if (notExists()) {
                 createDirectory()
             }
         }
-        for (image in images) {
-            out.reset()
-            val previewId = when (val checkExists = previewJdbi.checkIfPreviewExist(image.pathString)) {
-                null -> {
-                    val blob = createPreview(image, tempDir, out)
-                    val extension = if (image.extension == "eps") "png" else image.extension
-                    previewJdbi.insertPreview(image.pathString, blob, extension)
-                }
+        return flow {
+            for (image in images) {
+                out.reset()
+                val previewId = when (val checkExists = previewJdbi.checkIfPreviewExist(image.pathString)) {
+                    null -> {
+                        val blob = createPreview(image, tempDir, out)
+                        val extension = if (image.extension == "eps") "png" else image.extension
+                        previewJdbi.insertPreview(image.pathString, blob, extension)
+                    }
 
-                else -> if (checkExists.second == null) {
-                    val blob = createPreview(image, tempDir, out)
-                    previewJdbi.updatePreview(checkExists.first, blob)
-                    checkExists.first
-                } else {
-                    checkExists.first
+                    else -> if (checkExists.second == null) {
+                        val blob = createPreview(image, tempDir, out)
+                        previewJdbi.updatePreview(checkExists.first, blob)
+                        checkExists.first
+                    } else {
+                        checkExists.first
+                    }
                 }
-            }
-            emit(
-                StockImageWithMetadata(
-                    data = StockImage(
-                        fileName = image.name,
-                        title = "",
-                        description = "",
-                        firstCategory = "",
-                        secondaryCategory = "",
-                        keywords = "",
-                    ),
-                    previewId = previewId
+                emit(
+                    StockImageWithMetadata(
+                        data = StockImage(
+                            fileName = image.name,
+                            title = "",
+                            description = "",
+                            firstCategory = "",
+                            secondaryCategory = "",
+                            keywords = "",
+                        ),
+                        previewId = previewId
+                    )
                 )
-            )
+            }
         }
-        tempDir.toFile().deleteRecursively()
-    }.flowOn(Dispatchers.IO)
+            .onCompletion {
+                out.close()
+                tempDir.toFile().deleteRecursively()
+            }
+            .flowOn(Dispatchers.IO)
+    }
 
     private fun createPreview(image: Path, tempDir: Path, out: ByteArrayOutputStream): ByteArray? {
         if (image.extension == "eps") {
             Files.copy(convertEpsToPng(image, tempDir), out)
         } else {
-            val fxImage = Image(
-                image.toUri().toURL().toString(),
-                1024.0, 1024.0,
-                true, true
-            )
-            ImageIO.write(SwingFXUtils.fromFXImage(fxImage, null), "jpg", out)
+            val inputImage = image.inputStream().use {
+                ImageIO.read(it)
+            }
+            val width = 1024
+            val height = 1024
+            val scaled = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+            scaled.createGraphics().apply {
+                setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+                drawImage(inputImage, 0, 0, width, height, null)
+                dispose()
+            }
+            inputImage.flush()
+            ImageIO.write(scaled, "jpg", out)
+            scaled.flush()
         }
         return if (out.size() > 0) out.toByteArray() else null
     }

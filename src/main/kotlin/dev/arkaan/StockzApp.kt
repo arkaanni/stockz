@@ -3,37 +3,30 @@ package dev.arkaan
 import dev.arkaan.configuration.Configuration
 import dev.arkaan.view.HistoryScreen
 import dev.arkaan.view.MainScreen
+import dev.arkaan.view.Screen
 import javafx.application.Application
 import javafx.beans.property.SimpleBooleanProperty
 import javafx.scene.Scene
-import javafx.scene.text.Font
-import javafx.scene.text.FontWeight
-import javafx.scene.text.Text
 import javafx.stage.Stage
 import org.slf4j.LoggerFactory
 
 open class StockzApp : Application() {
     protected open val appContext = DefaultAppContext()
-    private val mainScreen by lazy {
+    private val showHistoryScreen = SimpleBooleanProperty(false)
+    private val mainScreen: Screen by lazy {
         MainScreen(
-            appContext.generateService(),
-            appContext.previewService(),
-            appContext.coroutineScope(),
+            appContext,
             openHistoryScreen = {
                 showHistoryScreen.set(true)
             }
         )
     }
+    private val historyStage by lazy { Stage() }
     private val historyScreen by lazy {
-        HistoryScreen(
-            appContext.previewService(),
-            appContext.generateService(),
-            appContext.csvService(),
-            appContext.coroutineScope()
-        )
+        HistoryScreen(appContext, historyStage, onClose = {
+            showHistoryScreen.set(false)
+        })
     }
-
-    private val showHistoryScreen = SimpleBooleanProperty(false)
 
     override fun start(primaryStage: Stage) {
         val apiKey = Configuration.apiKey() ?: throw IllegalStateException("API key is not set")
@@ -42,26 +35,25 @@ open class StockzApp : Application() {
             throw IllegalStateException("API key is not set")
         }
         appContext.generateService().setApiKey(apiKey)
-        showHistoryScreen.addListener { _, _, isShow ->
-            run {
-                if (isShow) {
-                    showHistoryScreen(primaryStage)
-                }
-            }
-        }
-        val scene = Scene(mainScreen.render())
+        val mainScene = Scene(mainScreen.render())
         primaryStage.apply {
             title = "Stockz"
-            this.scene = scene
+            this.scene = mainScene
             minWidth = 1100.0
             minHeight = 650.0
             show()
         }
-    }
-
-    fun showHistoryScreen(mainStage: Stage) {
-        historyScreen.start(mainStage) {
-            showHistoryScreen.set(false)
+        val historyScene = Scene(historyScreen.render())
+        historyStage.apply {
+            initOwner(primaryStage)
+            scene = historyScene
+        }
+        showHistoryScreen.addListener { _, _, isShow ->
+            run {
+                if (isShow) {
+                    historyStage.show()
+                }
+            }
         }
     }
 
@@ -75,9 +67,5 @@ open class StockzApp : Application() {
 
     companion object {
         private val LOGGER = LoggerFactory.getLogger(StockzApp::class.java)
-        fun Text.bold(size: Double): Text {
-            font = Font.font("", FontWeight.BOLD, size)
-            return this
-        }
     }
 }
